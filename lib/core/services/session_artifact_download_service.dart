@@ -1,3 +1,4 @@
+import '../utils/server_paths.dart';
 import 'dart:typed_data';
 
 import '../models/session_artifact.dart';
@@ -188,7 +189,7 @@ final class SessionArtifactDownloadService {
         _hasControl(path)) {
       return false;
     }
-    for (final rawSegment in path.split('/').skip(1)) {
+    for (final rawSegment in path.split(RegExp(r'[\\/]')).skip(1)) {
       if (rawSegment.isEmpty) return false;
       late final String decoded;
       try {
@@ -204,6 +205,7 @@ final class SessionArtifactDownloadService {
         return false;
       }
     }
+    if (ServerPath.looksWindows(path)) return true;
     final uri = Uri.tryParse(path);
     return uri != null &&
         !uri.hasScheme &&

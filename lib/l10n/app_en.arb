@@ -9,12 +9,18 @@
   "sChatConnected": "Chat connected",
   "sConnectionOptions": "Options for {name}",
   "@sConnectionOptions": {
-    "placeholders": {"name": {"type": "String"}}
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "sDashboardUser": "Username: {user}",
   "@sDashboardUser": {
     "placeholders": {
-      "user": {"type": "String"}
+      "user": {
+        "type": "String"
+      }
     }
   },
   "sPasswordTitle": "Change Dashboard password",
@@ -3933,8 +3939,12 @@
   "botCapabilitiesCount": "{count} of {total}",
   "@botCapabilitiesCount": {
     "placeholders": {
-      "count": { "type": "int" },
-      "total": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "botSkillsEmpty": "There are no skills in this profile",
@@ -5208,30 +5218,48 @@
   "cq1215CommandWaitsForCompaction": "Commands wait until the compaction finishes. Normal messages are queued.",
   "cq1215QueueParkedAfterCompaction": "paused: the compaction did not finish",
   "qp1215QueueNotStored": "This phone could not store it safely, so it was not sent. It stays in the queue: retry it from its row.",
-"tp1216PillCompacting": "Compacting…",
+  "tp1216PillCompacting": "Compacting…",
   "tp1216PillCompacted": "Compacted",
   "tp1216PillNothingToCompact": "No changes",
-"lo1216QueueParkedFromPreviousSession": "Queue paused since the last session",
-"s1216StartupFailedTitle": "Console could not start",
+  "lo1216QueueParkedFromPreviousSession": "Queue paused since the last session",
+  "s1216StartupFailedTitle": "Console could not start",
   "s1216StartupFailedBody": "Console could not read its saved data on this phone. Nothing has been deleted. If you just restarted the phone, unlock it and try again.",
   "s1216StartupRetry": "Retry",
   "vw1215OpenOutside": "Open outside",
   "vw1215Search": "Search in document",
   "vw1215SearchCount": "{current} of {total}",
-  "@vw1215SearchCount": {"placeholders": {"current": {"type": "int"}, "total": {"type": "int"}}},
+  "@vw1215SearchCount": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "vw1215NoMatches": "No matches",
   "vw1215PreviousMatch": "Previous match",
   "vw1215NextMatch": "Next match",
   "vw1215CloseSearch": "Close search",
   "vw1215Truncated": "Showing only part of the file ({shown} of {size}) to keep the app responsive.",
-  "@vw1215Truncated": {"placeholders": {"shown": {"type": "String"}, "size": {"type": "String"}}},
+  "@vw1215Truncated": {
+    "placeholders": {
+      "shown": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "vw1215ShowAll": "Show all",
   "vw1215Unsupported": "This file type can't be viewed inside the app. You can open it with another app or share it.",
   "vw1215LoadFailed": "The file couldn't be read.",
   "vw1215ViewSource": "View source",
   "vw1215ViewRendered": "View document",
   "vw1215LinkOpenFailed": "The link couldn't be opened.",
-"mp1215SavedToMemory": "Saved to memory",
+  "mp1215SavedToMemory": "Saved to memory",
   "mp1215SavedToProfile": "Saved to your profile",
   "mp1215MemoryUpdated": "Memory updated",
   "mp1215ProfileUpdated": "Profile updated",
@@ -5240,7 +5268,7 @@
   "mp1215MemoryChip": "memory",
   "mp1215ShowMore": "Show more",
   "mp1215ShowLess": "Show less",
-"pj1215ActionRejected": "Hermes rejected the action. Check the name or branch and try again.",
+  "pj1215ActionRejected": "Hermes rejected the action. Check the name or branch and try again.",
   "pj1215ActiveNotice": "“{name}” is now the active project",
   "pj1215AgoNow": "just now",
   "pj1215AgoMinutes": "{count} min ago",
@@ -5329,7 +5357,16 @@
   "lm1215EntryEmpty": "Hermes-managed llama.cpp, as in Desktop",
   "lmSetupOfferTitle": "Run locally · free, private",
   "lmSetupOfferText": "{model} fits your server · {size} download",
-  "@lmSetupOfferText": {"placeholders": {"model": {"type": "String"}, "size": {"type": "String"}}},
+  "@lmSetupOfferText": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "lmSetupOfferAction": "Set up",
   "lm1215Title": "Local models",
   "lm1215Intro": "Models Hermes runs with llama.cpp on your server, just like Desktop local mode. Nothing leaves the server.",
@@ -5487,9 +5524,21 @@
   "pw1215ConflictBody": "It was modified on the server while you were editing. Saving will replace those changes.",
   "pw1215Overwrite": "Overwrite",
   "pw1215EntryActions": "Actions for {name}",
-  "@pw1215EntryActions": {"placeholders": {"name": {"type": "String"}}},
+  "@pw1215EntryActions": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pw1215DeleteTitle": "Delete “{name}”?",
-  "@pw1215DeleteTitle": {"placeholders": {"name": {"type": "String"}}},
+  "@pw1215DeleteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pw1215DeleteFileBody": "It will be deleted from the server and cannot be undone.",
   "pw1215DeleteFolderBody": "It is only deleted if the folder is empty. This cannot be undone.",
   "pw1215Deleted": "Deleted.",
@@ -5502,11 +5551,11 @@
   "pw1215FilesReadOnlyConnection": "Read-only connection: you can view files but not change them.",
   "cr1215AwaitingUnseenInput": "Hermes is waiting for your answer to a question that was not shown.",
   "cr1215ShowQuestion": "Show question",
-"ss1215StatusWorking": "Working…",
+  "ss1215StatusWorking": "Working…",
   "cq1215QuestionNotRecovered": "The question could not be recovered. Hermes is still waiting for your answer.",
   "cq1215RetryQuestion": "Retry",
   "cq1215StopTurn": "Stop turn",
-"tg1215ProcessCompleted": "Background process finished",
+  "tg1215ProcessCompleted": "Background process finished",
   "tg1215ProcessExited": "Background process finished with an error",
   "tg1215ProcessTerminated": "Background process stopped",
   "tg1215ProcessLost": "Background process lost",
@@ -5516,7 +5565,7 @@
   "tg1215ProcessHideOutput": "Hide output",
   "tg1215ProcessNoOutput": "No output",
   "tg1215TurnCancelled": "Cancelled",
-"qr1215QueueRetryExhausted": "Couldn't send — Retry",
+  "qr1215QueueRetryExhausted": "Couldn't send — Retry",
   "hr1215AuthExpiredTitle": "Your {provider} sign-in has expired",
   "hr1215AuthExpiredTitleGeneric": "Your provider sign-in has expired",
   "hr1215AuthExpiredBody": "The provider rejected access because the sign-in expired or was revoked. Sign in again and retry the message.",
@@ -5554,24 +5603,60 @@
   "t1215PastedContent": "Pasted content",
   "t1215PastedContentSave": "Save",
   "tc1215DiffMoreLines": "Show {count} more lines",
-  "@tc1215DiffMoreLines": {"placeholders": {"count": {"type": "int"}}},
+  "@tc1215DiffMoreLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215DiffSemantics": "{name}: {added} lines added, {removed} removed",
-  "@tc1215DiffSemantics": {"placeholders": {"name": {"type": "String"}, "added": {"type": "int"}, "removed": {"type": "int"}}},
+  "@tc1215DiffSemantics": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "added": {
+        "type": "int"
+      },
+      "removed": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215CopyLatest": "Copy last message",
   "tc1215CopyFull": "Copy full response",
   "tc1215CopyMarkdown": "Copy Markdown",
   "tc1215CopyCode": "{count, plural, =1{Copy code} other{Copy {count} code blocks}}",
-  "@tc1215CopyCode": {"placeholders": {"count": {"type": "int"}}},
+  "@tc1215CopyCode": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215CopyOptionsHint": "more copy options",
   "tc1215TerminalOutput": "Output",
   "tc1215OutputShowAll": "Show all ({count} lines)",
-  "@tc1215OutputShowAll": {"placeholders": {"count": {"type": "int"}}},
+  "@tc1215OutputShowAll": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215FilesChanged": "{count, plural, =1{1 file changed} other{{count} files changed}}",
-  "@tc1215FilesChanged": {"placeholders": {"count": {"type": "int"}}},
+  "@tc1215FilesChanged": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "au1215CronRunViewOnly": "Scheduled run that never closed — view only",
   "au1215CronRunSendBlocked": "This scheduled run is view-only — sending is disabled.",
   "au1215BgNeededForAutomation": "Cron and Kanban notices only arrive while this is on.",
-"te1215TitleRateLimit": "Usage limit reached",
+  "te1215TitleRateLimit": "Usage limit reached",
   "te1215HintRateLimit": "Wait for the limit to lift or try another model.",
   "te1215TitleProviderBusy": "The AI service is busy",
   "te1215HintProviderBusy": "The provider is limiting requests right now. Try again in a moment or pick another model.",
@@ -5618,14 +5703,44 @@
   "te1215CopyDetails": "Copy details",
   "te1215DetailsCopied": "Details copied",
   "te1215BillingTitle": "No credit on {provider}",
-  "@te1215BillingTitle": {"placeholders": {"provider": {"type": "String"}}},
+  "@te1215BillingTitle": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "te1215ResetsAt": "Resets at {time} (in {remaining})",
-  "@te1215ResetsAt": {"placeholders": {"time": {"type": "String"}, "remaining": {"type": "String"}}},
+  "@te1215ResetsAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
   "te1215RetryAt": "Retry at {time}",
-  "@te1215RetryAt": {"placeholders": {"time": {"type": "String"}}},
+  "@te1215RetryAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "te1215RetryArmed": "Retrying at {time} (in {remaining})",
-  "@te1215RetryArmed": {"placeholders": {"time": {"type": "String"}, "remaining": {"type": "String"}}},
-"se1215DateThisWeek": "This week",
+  "@te1215RetryArmed": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "se1215DateThisWeek": "This week",
   "se1215DateLastWeek": "Last week",
   "se1215DateThisMonth": "This month",
   "se1215SortBy": "Sort by",
@@ -5643,7 +5758,13 @@
   "se1215ExportTooLarge": "Conversation too large to export from the phone",
   "se1215ExportFailed": "Could not export",
   "se1215MovedTo": "Moved to {project}",
-  "@se1215MovedTo": {"placeholders": {"project": {"type": "String"}}},
+  "@se1215MovedTo": {
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
   "pj1215PromptsAction": "Prompts",
   "pj1215PromptsEmpty": "No prompts in this chat yet.",
   "pj1215StickyPromptLabel": "Prompt of this reply; tap to jump to it",
@@ -5651,14 +5772,26 @@
   "voiceGptLiveFallbackNoticeNoReason": "GPT-Live unavailable. Using turn-based voice.",
   "voiceGptLiveEnded": "Live voice session ended",
   "voiceGptLiveEndedWithReason": "Live voice session ended: {reason}",
-  "@voiceGptLiveEndedWithReason": {"placeholders": {"reason": {"type": "String"}}},
+  "@voiceGptLiveEndedWithReason": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "voiceGptLiveReasonConnectionLost": "connection lost",
   "voiceGptLiveReasonClosed": "the session closed",
   "voiceGptLiveReasonAudio": "audio was interrupted",
   "voiceGptLiveReasonLeft": "you left the chat or the app",
   "voiceGptLiveCouldNotStart": "Could not start GPT-Live",
   "voiceGptLiveCouldNotStartDetail": "Could not start GPT-Live: {detail}",
-  "@voiceGptLiveCouldNotStartDetail": {"placeholders": {"detail": {"type": "String"}}},
+  "@voiceGptLiveCouldNotStartDetail": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
   "voiceGptLiveDelegationFailed": "Sorry, I could not reach Hermes for that request.",
   "tc1215SlashDescBtw": "Ask a side question without interrupting",
   "tc1215SlashArgBtw": "<question>",
@@ -5822,7 +5955,13 @@
   "mdlEndpointActivate": "Activate",
   "mdlEndpointDelete": "Delete",
   "mdlEndpointDeleteTitle": "Delete {name}?",
-  "@mdlEndpointDeleteTitle": {"placeholders": {"name": {"type": "String"}}},
+  "@mdlEndpointDeleteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "mdlEndpointSave": "Save endpoint",
   "mdlEndpointSaveAndUse": "Save and use",
   "mdlAddEndpoint": "Add endpoint",
@@ -5833,11 +5972,41 @@
   "mdlCredentialPoolEmptyBody": "This profile has no rotating credentials.",
   "mdlCredentialPoolLoadError": "The credential pool could not be loaded.",
   "mdlCredentialPoolKeyNumber": "Key #{index}",
-  "@mdlCredentialPoolKeyNumber": {"placeholders": {"index": {"type": "int"}}},
+  "@mdlCredentialPoolKeyNumber": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
   "mdlCredentialPoolEntryDetails": "{authType} · {source} · {status} · {requests} requests · priority {priority}",
-  "@mdlCredentialPoolEntryDetails": {"placeholders": {"authType": {"type": "String"}, "source": {"type": "String"}, "status": {"type": "String"}, "requests": {"type": "int"}, "priority": {"type": "int"}}},
+  "@mdlCredentialPoolEntryDetails": {
+    "placeholders": {
+      "authType": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      },
+      "requests": {
+        "type": "int"
+      },
+      "priority": {
+        "type": "int"
+      }
+    }
+  },
   "mdlFreeTierNotice": "Free models are available on this server · {label}",
-  "@mdlFreeTierNotice": {"placeholders": {"label": {"type": "String"}}},
+  "@mdlFreeTierNotice": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "mdlFreeTierSignIn": "Sign in",
   "mdlFreeTierDismiss": "Dismiss",
   "pc1215NewProject": "New project",
@@ -5854,13 +6023,25 @@
   "pc1215Create": "Create",
   "pc1215CreateFailed": "Couldn't create the project",
   "pc1215CoveredTitle": "Already in “{name}”",
-  "@pc1215CoveredTitle": {"placeholders": {"name": {"type": "String"}}},
+  "@pc1215CoveredTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pc1215CoveredBody": "This folder already belongs to a project. You can open it instead of creating another one.",
   "pc1215CoveredAutoBody": "Hermes already detected this folder as a project. You can open it, or create a named project for it.",
   "pc1215CoveredOpen": "Open project",
   "pc1215CoveredAdd": "Create anyway",
   "pc1215FolderAdded": "Folder added to “{name}”",
-  "@pc1215FolderAdded": {"placeholders": {"name": {"type": "String"}}},
+  "@pc1215FolderAdded": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pc1215OpenFolderFailed": "Couldn't create the project; opening the folder anyway.",
   "pc1215PickFolderTitle": "Choose a server folder",
   "pc1215PickFolderUse": "Use this folder",
@@ -5871,14 +6052,41 @@
   "apx1215ScopeAlwaysHint": "This kind of command in every chat. Saved on the server (command_allowlist in config.yaml) and in Settings › Permissions / Approvals; to withdraw it, remove it from both.",
   "rpl1215AskAboutThis": "Ask about this",
   "tc1215TurnChangesChip": "{count, plural, =1{1 file} other{{count} files}}",
-  "@tc1215TurnChangesChip": {"placeholders": {"count": {"type": "int"}}},
+  "@tc1215TurnChangesChip": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215DiffHunkLines": "Lines {start}–{end}",
-  "@tc1215DiffHunkLines": {"placeholders": {"start": {"type": "int"}, "end": {"type": "int"}}},
+  "@tc1215DiffHunkLines": {
+    "placeholders": {
+      "start": {
+        "type": "int"
+      },
+      "end": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215DiffHunkLine": "Line {line}",
-  "@tc1215DiffHunkLine": {"placeholders": {"line": {"type": "int"}}},
+  "@tc1215DiffHunkLine": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215DiffViewed": "Viewed",
   "tc1215DiffViewedSemantics": "Mark {name} as viewed",
-  "@tc1215DiffViewedSemantics": {"placeholders": {"name": {"type": "String"}}},
+  "@tc1215DiffViewedSemantics": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "tc1215TurnChangesDone": "Done",
   "cmp1215PasteImage": "Paste image",
   "@cmp1215PasteImage": {
@@ -5890,10 +6098,22 @@
   "mc1215FontLarger": "Larger code",
   "mc1215OpenInViewer": "Open in viewer",
   "mc1215CodeTitle": "Code · {language}",
-  "@mc1215CodeTitle": {"placeholders": {"language": {"type": "String"}}},
+  "@mc1215CodeTitle": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
   "mc1215ViewerActions": "Viewer actions",
   "cb1215ShowAllLines": "Show all {count} lines",
-  "@cb1215ShowAllLines": {"placeholders": {"count": {"type": "int"}}},
+  "@cb1215ShowAllLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "cb1215ShowLess": "Show less",
   "cb1215PlainCode": "text",
   "cs1215PinnedPromptYou": "You",
@@ -6245,13 +6465,40 @@
   "plv1215Depleted": "Out of credit: top up to continue",
   "plv1215Details": "Provider details",
   "plv1215Left": "{percent}% left",
-  "@plv1215Left": {"placeholders": {"percent": {"type": "int"}}},
+  "@plv1215Left": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "plv1215ResetsIn": "Resets in {time}",
-  "@plv1215ResetsIn": {"placeholders": {"time": {"type": "String"}}},
+  "@plv1215ResetsIn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "plv1215Of": "{amount} of {total}",
-  "@plv1215Of": {"placeholders": {"amount": {"type": "String"}, "total": {"type": "String"}}},
+  "@plv1215Of": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
   "plv1215BankedResets": "{count, plural, =1{1 reset banked} other{{count} resets banked}}",
-  "@plv1215BankedResets": {"placeholders": {"count": {"type": "int"}}},
+  "@plv1215BankedResets": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "thTaglineConsole": "graphite · terracotta",
   "thTaglineConsoleLight": "porcelain · terracotta",
   "thTaglineAmber": "soft graphite · the signature",
@@ -6697,9 +6944,21 @@
   "fp1215KeepEditing": "Keep editing",
   "fp1215Discard": "Discard",
   "fp1215ProjectPathPreview": "New chats will open in {path}",
-  "@fp1215ProjectPathPreview": {"placeholders": {"path": {"type": "String"}}},
+  "@fp1215ProjectPathPreview": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "fp1215IdeaPathPreview": "Saved as {path}",
-  "@fp1215IdeaPathPreview": {"placeholders": {"path": {"type": "String"}}},
+  "@fp1215IdeaPathPreview": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "fp1215NextRuns": "Next runs",
   "fp1215NameLabel": "Name",
   "chatModelCatalogStale": "Previous list, not confirmed.",
@@ -6752,7 +7011,13 @@
   "voiceEngineProbeFailed": "Could not check whether this server offers GPT-Live.",
   "voiceServerTestFailedShort": "The test failed",
   "voiceServerTestMissingKey": "The {provider} key is missing on the server",
-  "@voiceServerTestMissingKey": {"placeholders": {"provider": {"type": "String"}}},
+  "@voiceServerTestMissingKey": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "voiceServerTestMissingKeyGeneric": "A key is missing on the server",
   "voiceServerTestResponseLabel": "Server response",
   "voiceMainConversation": "Voice conversation",
@@ -6760,9 +7025,21 @@
   "voiceMainDictation": "Dictation",
   "voiceMainReplyVoice": "Reply voice",
   "voiceProblemTapDictation": "{problem}. Tap Dictation.",
-  "@voiceProblemTapDictation": {"placeholders": {"problem": {"type": "String"}}},
+  "@voiceProblemTapDictation": {
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
   "voiceProblemTapReplyVoice": "{problem}. Tap Reply voice.",
-  "@voiceProblemTapReplyVoice": {"placeholders": {"problem": {"type": "String"}}},
+  "@voiceProblemTapReplyVoice": {
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
   "voiceProblemDictationModel": "The dictation model is not downloaded",
   "voiceProblemDictationServer": "Dictation cannot use the server right now",
   "voiceProblemVoiceModel": "The voice is not downloaded",
@@ -6771,7 +7048,13 @@
   "voiceChatModeSaveFailed": "Could not change the voice conversation on the server.",
   "voiceServerAddKey": "Add key",
   "voiceServerKeyTitle": "{provider} key",
-  "@voiceServerKeyTitle": {"placeholders": {"provider": {"type": "String"}}},
+  "@voiceServerKeyTitle": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "voiceServerKeyMessage": "It is saved on your Hermes server, not on this phone.",
   "voiceServerKeyHint": "Paste the key here",
   "voiceServerAlsoListens": "In voice conversation, the server also listens to you.",
@@ -6785,11 +7068,23 @@
   "voiceRowEcho": "Echo transcripts",
   "voiceRowLiveTranscription": "Live transcription",
   "voiceSecondsValue": "{seconds} s",
-  "@voiceSecondsValue": {"placeholders": {"seconds": {"type": "String"}}},
+  "@voiceSecondsValue": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
   "voiceDownloadAction": "Download",
   "voiceRemoveDownload": "Delete download",
   "voiceNeedsDownload": "{mb} MB download",
-  "@voiceNeedsDownload": {"placeholders": {"mb": {"type": "String"}}},
+  "@voiceNeedsDownload": {
+    "placeholders": {
+      "mb": {
+        "type": "String"
+      }
+    }
+  },
   "voicePersonalityHint": "How it should speak and behave",
   "voicePersonalityDefault": "Default",
   "voiceChangeLanguage": "Change language",
@@ -6960,5 +7255,11 @@
   "onb4ManualBody": "Type the address, the user and the password that the setup showed you when it finished.",
   "drawerRenameHint": "Long-press an instance to rename it",
   "drawerRenameTitle": "Rename instance",
-  "drawerRenameField": "Display name"
+  "drawerRenameField": "Display name",
+  "setServerOs": "Server OS",
+  "setServerOsNote": "Which system the Hermes host runs. Auto detects it from the folders the server returns.",
+  "serverOsAuto": "Auto",
+  "serverOsWindows": "Windows",
+  "serverOsLinux": "Linux",
+  "serverPathGoTo": "Go to path"
 }

@@ -7255,5 +7255,11 @@
   "onb4ManualBody": "输入安装完成时显示给您的地址、用户名和密码。",
   "drawerRenameHint": "长按实例可重命名",
   "drawerRenameTitle": "重命名实例",
-  "drawerRenameField": "显示名称"
+  "drawerRenameField": "显示名称",
+  "setServerOs": "服务器系统",
+  "setServerOsNote": "Hermes 主机运行的系统。自动会根据服务器返回的文件夹路径识别。",
+  "serverOsAuto": "自动",
+  "serverOsWindows": "Windows",
+  "serverOsLinux": "Linux",
+  "serverPathGoTo": "跳转到路径"
 }

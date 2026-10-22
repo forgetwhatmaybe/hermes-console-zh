@@ -42,6 +42,21 @@
 | `android/settings.gradle.kts`、`android/build.gradle.kts` | 增加阿里云 Maven 镜像（google/public/gradle-plugin） | 国内网络访问 `dl.google.com` 不稳定；官方仓库仍保留在后备 |
 | `.gitignore` | 忽略 `*.jks`、`*.p12`、`.zh/` | 防止签名文件和本地翻译脚本入库 |
 
+### 4. Windows 服务端兼容（2026-10-22）
+
+| 文件 | 改动 |
+|---|---|
+| `lib/core/utils/server_paths.dart` | 新增：路径分隔符、父目录、basename、包含判断、绝对路径判断，同时支持 `C:\...` 与 `/...` |
+| `lib/core/widgets/projects/project_files_browser.dart` | 文件夹选择器自动探测服务端路径风格（Windows 自动 re-root 到盘符根）；新增“跳转到路径”按钮，可切到 `D:\` 等其他盘 |
+| `lib/core/widgets/projects/project_create_sheet.dart` | 项目名/basename/包含判断改用 ServerPath |
+| `lib/core/screens/projects_center_screen.dart` | 选取文件夹后的绝对路径校验支持 Windows |
+| `lib/core/bots/ui/room/room_models.dart` | 房间附件路径校验支持 Windows |
+| `lib/core/screens/settings_screen.dart` | 设置 → 外观 → **服务器系统**：自动 / Windows / Linux（SharedPreferences `server_os`） |
+
+**原因**：服务端是 Windows 时 `/api/fs/list` 返回 `C:\Users\...`，旧逻辑只认 `/` 前缀，项目文件夹选择器停在根目录、无法进入子目录，选中后也被“非绝对路径”拦截。
+
+**已知限制**：SSH 终端需要 Windows 端自行安装/启用 OpenSSH Server；本地模型、语音、cron 由服务端执行，不属于客户端路径逻辑。
+
 ## 构建
 
 环境（本机验证）：

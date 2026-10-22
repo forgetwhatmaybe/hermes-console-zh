@@ -6,6 +6,7 @@
 /// "new since you left" divider, which is per-device UI state).
 library;
 
+import '../../../utils/server_paths.dart';
 import 'package:flutter/painting.dart' show Color, HSLColor;
 
 import '../../../models/agent_profile.dart';
@@ -94,10 +95,12 @@ String _unquote(String value) {
 }
 
 bool _safeAbsolutePath(String path) =>
-    path.startsWith('/') &&
+    ServerPath.isAbsolute(path) &&
     !path.startsWith('//') &&
     path.length <= 2048 &&
-    !path.split('/').any((segment) => segment == '..' || segment == '.') &&
+    !path
+        .split(RegExp(r'[\\/]'))
+        .any((segment) => segment == '..' || segment == '.') &&
     !path.codeUnits.any((unit) => unit < 0x20 || unit == 0x7f);
 
 /// Appends Desktop's reference suffix to [text] (same wording and

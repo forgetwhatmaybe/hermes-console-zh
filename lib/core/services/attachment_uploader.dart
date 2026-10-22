@@ -1,3 +1,4 @@
+import '../utils/server_paths.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -816,7 +817,7 @@ class AttachmentUploader {
     final cached = _uploadDirs[dash.baseUrl];
     if (cached != null) return cached;
     final base = await _agentBaseDir(dash);
-    final dir = '$base/uploads';
+    final dir = ServerPath.join(base, 'uploads');
     // Best-effort: crear la carpeta (ignora "ya existe"). Solo se intenta una
     // vez por Dashboard durante la vida del proceso.
     try {
@@ -834,7 +835,9 @@ class AttachmentUploader {
     try {
       final status = await dash.apiGet('status');
       final home = (status['hermes_home'] ?? '').toString();
-      if (home.startsWith('/')) return home;
+      if (ServerPath.isAbsolute(home)) return home;
+      final cwd = (status['cwd'] ?? '').toString();
+      if (ServerPath.isAbsolute(cwd)) return cwd;
     } catch (e) {
       debugPrint('[attachment] excepción silenciada (se ignora sin más): $e');
     }

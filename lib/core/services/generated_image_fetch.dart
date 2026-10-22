@@ -1,3 +1,4 @@
+import '../utils/server_paths.dart';
 import 'dart:typed_data';
 
 import 'generated_image_service.dart';
@@ -90,9 +91,9 @@ class GeneratedImageFetch {
         'generated images require an official host-local profile; SSH workspace identity unavailable',
       );
     }
-    if (plainName) return '$root/cache/images/$basename';
+    if (plainName) return ServerPath.join(ServerPath.join(ServerPath.join(root, 'cache'), 'images'), basename);
     if (basename.startsWith('~/.hermes/cache/images/')) {
-      return '$root/cache/images/${sourceMatch!.group(1)}';
+      return ServerPath.join(ServerPath.join(ServerPath.join(root, 'cache'), 'images'), sourceMatch!.group(1)!);
     }
     if (basename != '$root/cache/images/${sourceMatch!.group(1)}' &&
         basename != '$root/cache/generated/images/${sourceMatch.group(1)}') {
@@ -109,7 +110,7 @@ class GeneratedImageFetch {
     bool Function()? isCurrent,
   }) async {
     if (!GeneratedMediaService.isSafeGeneratedImageSource(target) ||
-        !target.startsWith('/')) {
+        !ServerPath.isAbsolute(target)) {
       throw ArgumentError('unsafe generated image target');
     }
     final owner = profile == null || profile.isEmpty ? 'default' : profile;

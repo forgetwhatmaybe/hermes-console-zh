@@ -9,6 +9,8 @@ import '../models/desktop_control_center.dart';
 import '../navigation/chat_route.dart';
 import '../design/modal.dart' show HermesAction, showHermesMenu;
 import '../services/connection_manager.dart';
+import '../services/server_os_pref.dart';
+import '../utils/server_paths.dart';
 import '../services/desktop_control_gateway.dart';
 import '../services/new_session_factory.dart';
 import '../theme/app_theme.dart';
@@ -303,6 +305,7 @@ class _ProjectsCenterScreenState extends State<ProjectsCenterScreen> {
       writes: _writes.fileWrites,
       readOnlyConnection: widget.connection.readOnly,
       startPath: start,
+      serverOs: ServerOsPref.read(widget.connectionManager.prefs),
       failureText: (error) => projectFailureText(error, strings),
     );
   }
@@ -370,7 +373,7 @@ class _ProjectsCenterScreenState extends State<ProjectsCenterScreen> {
     final picked = await _pickServerFolder(context);
     if (!mounted || picked == null) return;
     final target = normalizeServerFolder(picked);
-    if (!target.startsWith('/')) return;
+    if (!ServerPath.isAbsolute(target)) return;
     final existing = await _ownerOf(target);
     if (!mounted) return;
     if (existing != null) {

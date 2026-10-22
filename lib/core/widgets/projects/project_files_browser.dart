@@ -18,6 +18,7 @@ import '../../design/modal.dart'
         showHermesMenu,
         showHermesSurface;
 import '../../models/project_files.dart';
+import '../../utils/server_paths.dart';
 import '../../services/artifact_viewer_kind.dart';
 import '../../services/desktop_control_gateway.dart';
 import '../../theme/app_theme.dart';
@@ -81,11 +82,41 @@ String? validProjectEntryName(String raw) {
 }
 
 /// `childPath` from Desktop's remote picker.
-String projectChildPath(String parent, String name) {
-  final base = parent.length > 1 && parent.endsWith('/')
-      ? parent.substring(0, parent.length - 1)
-      : parent;
-  return base == '/' ? '/$name' : '$base/$name';
+String projectChildPath(String parent, String name) =>
+    ServerPath.join(parent, name);
+
+Future<void> _showGoToPath(
+  BuildContext context,
+  ProjectFilesController controller,
+  Strings strings,
+) async {
+  final text = TextEditingController(text: controller.path);
+  final target = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(strings.serverPathGoTo),
+      content: TextField(
+        controller: text,
+        autofocus: true,
+        decoration: InputDecoration(hintText: controller.root),
+        onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(strings.commonCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(text.text),
+          child: Text(strings.commonOpen),
+        ),
+      ],
+    ),
+  );
+  text.dispose();
+  final trimmed = target?.trim() ?? '';
+  if (trimmed.isEmpty) return;
+  await controller.retarget(trimmed);
 }
 
 /// Where the read-only browser of one project currently is. Owned by the
@@ -93,18 +124,21 @@ String projectChildPath(String parent, String name) {
 /// Archivos, and so system back can go up one folder first.
 class ProjectFilesController extends ChangeNotifier {
   ProjectFilesController({
-    required this.root,
+    required String root,
     required this.gateway,
     this.writes,
     this.readOnlyConnection = false,
     this.pickFolders = false,
     String? initialPath,
-  }) : _path = initialPath != null && _isInside(root, initialPath)
+  }) : _root = root,
+       _path = initialPath != null && _isInside(root, initialPath)
            ? initialPath
            : root;
 
   /// Project folder on the Hermes host; the browser never leaves it.
-  final String root;
+  /// Mutable so a Windows drive jump (D:\...) can re-root the picker.
+  String _root;
+  String get root => _root;
 
   /// Null when the connected gateway has no file surface at all.
   final HermesProjectFilesGateway? gateway;
@@ -148,7 +182,8 @@ class ProjectFilesController extends ChangeNotifier {
   int _generation = 0;
 
   String get path => _path;
-  bool get atRoot => _path == root;
+  bool get atRoot =>
+      ServerPath.normalize(_path) == ServerPath.normalize(root);
   bool get loading => _loading;
   Object? get failure => _failure;
   ProjectDirectoryListing? get listing => _listings[_path];
@@ -160,13 +195,11 @@ class ProjectFilesController extends ChangeNotifier {
 
   /// Folders from the project root down to [path], as (label, path).
   List<(String, String)> get crumbs {
-    final out = <(String, String)>[(_basename(root), root)];
+    final out = <(String, String)>[(ServerPath.basename(root), root)];
     if (atRoot || !_inside(_path)) return out;
-    var current = root == '/' ? '' : root;
-    final rest = _path.substring(root == '/' ? 1 : root.length + 1);
-    for (final part in rest.split('/')) {
-      if (part.isEmpty) continue;
-      current = '$current/$part';
+    var current = root;
+    for (final part in ServerPath.partsBelow(root, _path)) {
+      current = ServerPath.join(current, part);
       out.add((part, current));
     }
     return out;
@@ -187,11 +220,23 @@ class ProjectFilesController extends ChangeNotifier {
     if (!_listings.containsKey(folder)) await _read(folder);
   }
 
+  /// Re-roots the browser at another absolute path (Windows drive jump).
+  Future<void> retarget(String target) async {
+    final normalized = ServerPath.normalize(target);
+    if (normalized.isEmpty) return;
+    _root = ServerPath.rootOf(normalized);
+    _path = normalized;
+    _listings.clear();
+    _failure = null;
+    _notify();
+    await _read(_path);
+  }
+
   /// Goes one folder up; false when already at the project root.
   bool up() {
     if (atRoot) return false;
-    final cut = _path.lastIndexOf('/');
-    unawaited(open(cut <= root.length ? root : _path.substring(0, cut)));
+    final parent = ServerPath.parent(_path);
+    unawaited(open(ServerPath.isInside(root, parent) ? parent : root));
     return true;
   }
 
@@ -208,7 +253,7 @@ class ProjectFilesController extends ChangeNotifier {
   /// Forgets [folder] and everything cached below it.
   void invalidate(String folder) {
     _listings.removeWhere(
-      (key, _) => key == folder || key.startsWith('$folder/'),
+      (key, _) => key == folder || ServerPath.isInside(folder, key),
     );
   }
 
@@ -248,8 +293,7 @@ class ProjectFilesController extends ChangeNotifier {
   bool _inside(String folder) => _isInside(root, folder);
 
   static bool _isInside(String root, String folder) =>
-      folder == root ||
-      (root == '/' ? folder.startsWith('/') : folder.startsWith('$root/'));
+      ServerPath.isInside(root, folder);
 
   void _notify() {
     if (!_disposed) notifyListeners();
@@ -260,16 +304,6 @@ class ProjectFilesController extends ChangeNotifier {
     _disposed = true;
     super.dispose();
   }
-}
-
-String _basename(String path) {
-  final trimmed = path.endsWith('/') && path.length > 1
-      ? path.substring(0, path.length - 1)
-      : path;
-  final cut = trimmed.lastIndexOf('/');
-  return cut < 0 || cut == trimmed.length - 1
-      ? trimmed
-      : trimmed.substring(cut + 1);
 }
 
 /// Folder browser for the Archivos tab of a project: breadcrumbs, folders
@@ -699,7 +733,11 @@ class _ProjectFilesBrowserState extends State<ProjectFilesBrowser> {
     final strings = Strings.of(context);
     // Only entries listed inside the project root are ever deletable, and
     // never the root itself.
-    if (!entry.path.startsWith('${controller.root}/')) return;
+    if (!ServerPath.isInside(controller.root, entry.path) ||
+        ServerPath.normalize(entry.path) ==
+            ServerPath.normalize(controller.root)) {
+      return;
+    }
     final parent = controller.path;
     final confirmed = await showHermesDialog<bool>(
       context: context,
@@ -1223,22 +1261,52 @@ Future<String?> showServerFolderPicker(
   HermesProjectFileWritesGateway? writes,
   bool readOnlyConnection = false,
   String? startPath,
+  ServerOs serverOs = ServerOs.auto,
   required String Function(Object failure) failureText,
-}) => Navigator.of(context).push<String>(
-  MaterialPageRoute(
-    builder: (_) => _ServerFolderPicker(
-      controller: ProjectFilesController(
-        root: '/',
-        gateway: files,
-        writes: writes,
-        readOnlyConnection: readOnlyConnection,
-        pickFolders: true,
-        initialPath: startPath,
+}) async {
+  var root = '/';
+  var initialPath = startPath;
+  if (serverOs == ServerOs.windows) {
+    root = startPath != null && ServerPath.looksWindows(startPath)
+        ? ServerPath.rootOf(startPath)
+        : 'C:\\';
+  } else if (serverOs == ServerOs.linux) {
+    root = '/';
+  } else if (startPath != null && ServerPath.looksWindows(startPath)) {
+    root = ServerPath.rootOf(startPath);
+  } else {
+    try {
+      final probe = await files.listProjectDirectory(startPath ?? '/');
+      for (final entry in probe.entries) {
+        if (ServerPath.looksWindows(entry.path)) {
+          root = ServerPath.rootOf(entry.path);
+          break;
+        }
+      }
+    } catch (_) {
+      // Keep the POSIX root; the first listing will surface the error.
+    }
+  }
+  if (initialPath != null && !ServerPath.isInside(root, initialPath)) {
+    initialPath = null;
+  }
+  if (!context.mounted) return null;
+  return Navigator.of(context).push<String>(
+    MaterialPageRoute(
+      builder: (_) => _ServerFolderPicker(
+        controller: ProjectFilesController(
+          root: root,
+          gateway: files,
+          writes: writes,
+          readOnlyConnection: readOnlyConnection,
+          pickFolders: true,
+          initialPath: initialPath,
+        ),
+        failureText: failureText,
       ),
-      failureText: failureText,
     ),
-  ),
-);
+  );
+}
 
 class _ServerFolderPicker extends StatefulWidget {
   const _ServerFolderPicker({
@@ -1265,7 +1333,17 @@ class _ServerFolderPickerState extends State<_ServerFolderPicker> {
     final strings = Strings.of(context);
     final controller = widget.controller;
     return Scaffold(
-      appBar: HermesAppBar(title: Text(strings.pc1215PickFolderTitle)),
+      appBar: HermesAppBar(
+        title: Text(strings.pc1215PickFolderTitle),
+        actions: [
+          IconButton(
+            key: const ValueKey('pc1215-go-to-path'),
+            tooltip: strings.serverPathGoTo,
+            icon: const Icon(Icons.edit_location_alt_outlined),
+            onPressed: () => _showGoToPath(context, controller, strings),
+          ),
+        ],
+      ),
       // The list dissolves before the button below it, which sits on the
       // page with no band.
       body: HermesFadedEnd(

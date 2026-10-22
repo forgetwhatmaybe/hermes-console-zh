@@ -9,12 +9,18 @@
   "sChatConnected": "Chat conectado",
   "sConnectionOptions": "Opciones de {name}",
   "@sConnectionOptions": {
-    "placeholders": {"name": {"type": "String"}}
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "sDashboardUser": "Usuario: {user}",
   "@sDashboardUser": {
     "placeholders": {
-      "user": {"type": "String"}
+      "user": {
+        "type": "String"
+      }
     }
   },
   "sPasswordTitle": "Cambiar contraseña del Dashboard",
@@ -4635,8 +4641,12 @@
   "botCapabilitiesCount": "{count} de {total}",
   "@botCapabilitiesCount": {
     "placeholders": {
-      "count": { "type": "int" },
-      "total": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "botSkillsEmpty": "No hay skills en este perfil",
@@ -6140,7 +6150,7 @@
   "cq1215CommandWaitsForCompaction": "Los comandos esperan a que termine la compactación. Los mensajes normales se ponen en cola.",
   "cq1215QueueParkedAfterCompaction": "en pausa: la compactación no terminó",
   "qp1215QueueNotStored": "No se ha podido guardar de forma segura en este móvil y no se ha enviado. Sigue en la cola: reinténtalo desde su fila.",
-"tp1216PillCompacting": "Compactando…",
+  "tp1216PillCompacting": "Compactando…",
   "@tp1216PillCompacting": {
     "description": "Short label in the context pill under the composer while the conversation is being compacted."
   },
@@ -6152,27 +6162,45 @@
   "@tp1216PillNothingToCompact": {
     "description": "Short label in the context pill when a compaction finished without changing anything."
   },
-"lo1216QueueParkedFromPreviousSession": "Cola en pausa desde la última sesión",
-"s1216StartupFailedTitle": "No se pudo iniciar Console",
+  "lo1216QueueParkedFromPreviousSession": "Cola en pausa desde la última sesión",
+  "s1216StartupFailedTitle": "No se pudo iniciar Console",
   "s1216StartupFailedBody": "Console no pudo leer sus datos guardados en este teléfono. No se ha borrado nada. Si acabas de reiniciarlo, desbloquéalo y vuelve a intentarlo.",
   "s1216StartupRetry": "Reintentar",
   "vw1215OpenOutside": "Abrir fuera",
   "vw1215Search": "Buscar en el documento",
   "vw1215SearchCount": "{current} de {total}",
-  "@vw1215SearchCount": {"placeholders": {"current": {"type": "int"}, "total": {"type": "int"}}},
+  "@vw1215SearchCount": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "vw1215NoMatches": "Sin resultados",
   "vw1215PreviousMatch": "Coincidencia anterior",
   "vw1215NextMatch": "Coincidencia siguiente",
   "vw1215CloseSearch": "Cerrar búsqueda",
   "vw1215Truncated": "Se muestra solo una parte ({shown} de {size}) para que la app siga fluida.",
-  "@vw1215Truncated": {"placeholders": {"shown": {"type": "String"}, "size": {"type": "String"}}},
+  "@vw1215Truncated": {
+    "placeholders": {
+      "shown": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "vw1215ShowAll": "Mostrar todo",
   "vw1215Unsupported": "Este tipo de archivo no se puede ver dentro de la app. Puedes abrirlo con otra app o compartirlo.",
   "vw1215LoadFailed": "No se ha podido leer el archivo.",
   "vw1215ViewSource": "Ver código fuente",
   "vw1215ViewRendered": "Ver documento",
   "vw1215LinkOpenFailed": "No se ha podido abrir el enlace.",
-"mp1215SavedToMemory": "Guardado en memoria",
+  "mp1215SavedToMemory": "Guardado en memoria",
   "mp1215SavedToProfile": "Guardado en tu perfil",
   "mp1215MemoryUpdated": "Memoria actualizada",
   "mp1215ProfileUpdated": "Perfil actualizado",
@@ -6181,23 +6209,59 @@
   "mp1215MemoryChip": "memoria",
   "mp1215ShowMore": "Ver más",
   "mp1215ShowLess": "Ver menos",
-"pj1215ActionRejected": "Hermes rechazó la acción. Revisa el nombre o la rama e inténtalo de nuevo.",
+  "pj1215ActionRejected": "Hermes rechazó la acción. Revisa el nombre o la rama e inténtalo de nuevo.",
   "pj1215ActiveNotice": "«{name}» es ahora el proyecto activo",
-  "@pj1215ActiveNotice": {"placeholders": {"name": {"type": "String"}}},
+  "@pj1215ActiveNotice": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pj1215AgoNow": "ahora mismo",
   "pj1215AgoMinutes": "hace {count} min",
-  "@pj1215AgoMinutes": {"placeholders": {"count": {"type": "int"}}},
+  "@pj1215AgoMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "pj1215AgoHours": "hace {count} h",
-  "@pj1215AgoHours": {"placeholders": {"count": {"type": "int"}}},
+  "@pj1215AgoHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "pj1215AgoDays": "{count, plural, one{hace 1 día} other{hace {count} días}}",
-  "@pj1215AgoDays": {"placeholders": {"count": {"type": "int"}}},
+  "@pj1215AgoDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "pj1215AgoDate": "el {date}",
-  "@pj1215AgoDate": {"placeholders": {"date": {"type": "String"}}},
+  "@pj1215AgoDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
   "pj1215AppearanceTitle": "Apariencia",
   "pj1215AppearanceAdoptNote": "Este proyecto lo detectó Hermes solo. Al darle un color o un icono se guarda como proyecto propio, igual que en Desktop.",
   "pj1215AppearanceColor": "Color",
   "pj1215AppearanceColorN": "Color {index}",
-  "@pj1215AppearanceColorN": {"placeholders": {"index": {"type": "int"}}},
+  "@pj1215AppearanceColorN": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
   "pj1215AppearanceNoColor": "Sin color",
   "pj1215AppearanceIcon": "Icono (toca otra vez para quitarlo)",
   "pj1215BranchesLoading": "Cargando ramas…",
@@ -6207,13 +6271,31 @@
   "pj1215BranchNewWorktree": "nuevo worktree",
   "pj1215BranchTrackRemote": "traer del remoto",
   "pj1215ChatWorkspace": "Trabajará en {path}",
-  "@pj1215ChatWorkspace": {"placeholders": {"path": {"type": "String"}}},
+  "@pj1215ChatWorkspace": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "pj1215DeleteTitle": "¿Quitar «{name}»?",
-  "@pj1215DeleteTitle": {"placeholders": {"name": {"type": "String"}}},
+  "@pj1215DeleteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pj1215DeleteBody": "Se quita el proyecto guardado de Hermes. Los ficheros, los repositorios Git y los worktrees no se tocan, y las conversaciones siguen existiendo.",
   "pj1215DeleteConfirm": "Quitar proyecto",
   "pj1215Deleted": "Se ha quitado «{name}»",
-  "@pj1215Deleted": {"placeholders": {"name": {"type": "String"}}},
+  "@pj1215Deleted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pj1215DesktopOnly": "Solo desde Desktop: necesita el explorador de archivos del ordenador.",
   "pj1215ExplainTitle": "¿Qué es un proyecto?",
   "pj1215ExplainFolderTitle": "Una carpeta del servidor",
@@ -6227,9 +6309,21 @@
   "pj1215ExplainSafeTitle": "No borra nada",
   "pj1215ExplainSafeBody": "Quitar u ocultar un proyecto solo lo saca de la lista. Tus ficheros y conversaciones siguen ahí.",
   "pj1215HiddenNotice": "«{name}» oculto en este móvil",
-  "@pj1215HiddenNotice": {"placeholders": {"name": {"type": "String"}}},
+  "@pj1215HiddenNotice": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pj1215ShowHidden": "{count, plural, one{Mostrar 1 oculto} other{Mostrar {count} ocultos}}",
-  "@pj1215ShowHidden": {"placeholders": {"count": {"type": "int"}}},
+  "@pj1215ShowHidden": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "pj1215HideHidden": "Esconder los ocultos",
   "pj1215HomeBucketBody": "Conversaciones sin carpeta de trabajo.",
   "pj1215Intro": "Tus conversaciones agrupadas por la carpeta del servidor en la que trabajan, igual que en Desktop.",
@@ -6257,7 +6351,13 @@
   "pj1215RenameTitle": "Renombrar proyecto",
   "pj1215RenameHint": "Nombre del proyecto",
   "pj1215Renamed": "Ahora se llama «{name}»",
-  "@pj1215Renamed": {"placeholders": {"name": {"type": "String"}}},
+  "@pj1215Renamed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pj1215WhatIsThis": "¿Qué es esto?",
   "pj1215WorktreeTitle": "Nuevo worktree",
   "pj1215WorktreeBody": "Crea una rama nueva en su propia carpeta y abre un chat allí. La rama principal no se toca.",
@@ -6266,7 +6366,13 @@
   "pj1215WorktreeBranchHint": "p. ej. arreglar-login",
   "pj1215WorktreeBase": "A partir de",
   "pj1215WorktreeBaseDefault": "{name} (principal)",
-  "@pj1215WorktreeBaseDefault": {"placeholders": {"name": {"type": "String"}}},
+  "@pj1215WorktreeBaseDefault": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pj1215WorktreeNoBases": "No se pudieron listar las ramas; se usará la rama actual del repositorio.",
   "pj1215WorktreeCreate": "Crear y abrir chat",
   "pj1215WorktreeConvertInstead": "Mejor abrir una rama existente",
@@ -6287,17 +6393,41 @@
   "lm1215Unavailable": "Tu Hermes no tiene modelos locales activados (modo local de Desktop)",
   "lm1215EntryError": "No se pudo comprobar. Toca para abrir y reintentar",
   "lm1215EntrySummary": "{count, plural, one{1 modelo descargado} other{{count} modelos descargados}}",
-  "@lm1215EntrySummary": {"placeholders": {"count": {"type": "int"}}},
+  "@lm1215EntrySummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "lm1215EntryEmpty": "llama.cpp gestionado por Hermes, como en Desktop",
   "lmSetupOfferTitle": "Ejecutar en local · gratis, privado",
   "lmSetupOfferText": "{model} cabe en tu servidor · descarga de {size}",
-  "@lmSetupOfferText": {"placeholders": {"model": {"type": "String"}, "size": {"type": "String"}}},
+  "@lmSetupOfferText": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "lmSetupOfferAction": "Configurar",
   "lm1215Title": "Modelos locales",
   "lm1215Intro": "Modelos que Hermes ejecuta con llama.cpp en tu servidor, igual que el modo local de Desktop. Nada sale del servidor.",
   "lm1215RuntimeTitle": "Motor local",
   "lm1215RuntimeReady": "llama.cpp {tag} · {backend}",
-  "@lm1215RuntimeReady": {"placeholders": {"tag": {"type": "String"}, "backend": {"type": "String"}}},
+  "@lm1215RuntimeReady": {
+    "placeholders": {
+      "tag": {
+        "type": "String"
+      },
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
   "lm1215RuntimeMissing": "El motor llama.cpp no está instalado en el servidor",
   "lm1215InstallRuntime": "Instalar motor",
   "lm1215InstallTitle": "¿Instalar el motor local?",
@@ -6316,36 +6446,87 @@
   "lm1215StateDefault": "Predeterminado",
   "lm1215StateLoaded": "En memoria",
   "lm1215StateLoading": "Cargando {percent} %",
-  "@lm1215StateLoading": {"placeholders": {"percent": {"type": "int"}}},
+  "@lm1215StateLoading": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "lm1215StateOnDisk": "En disco",
   "lm1215MoreActions": "Más acciones",
   "lm1215ActionUse": "Usar para chats nuevos",
   "lm1215ActionEject": "Liberar memoria",
   "lm1215ActionDelete": "Eliminar del servidor",
   "lm1215DeleteTitle": "¿Eliminar {model}?",
-  "@lm1215DeleteTitle": {"placeholders": {"model": {"type": "String"}}},
+  "@lm1215DeleteTitle": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
   "lm1215DeleteBody": "Se borrarán sus archivos del disco del servidor. Podrás volver a descargarlo.",
   "lm1215DeleteActiveBody": "Es el modelo predeterminado para chats nuevos: elige otro después. Se borrarán sus archivos del disco del servidor.",
   "lm1215Delete": "Eliminar",
   "lm1215Cancel": "Cancelar",
   "lm1215Deleted": "{model} eliminado",
-  "@lm1215Deleted": {"placeholders": {"model": {"type": "String"}}},
+  "@lm1215Deleted": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
   "lm1215Ejected": "Memoria de la GPU liberada; se vuelve a cargar con el siguiente mensaje",
   "lm1215Activated": "Los chats nuevos usarán {model}",
-  "@lm1215Activated": {"placeholders": {"model": {"type": "String"}}},
+  "@lm1215Activated": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
   "lm1215Activating": "Activando…",
   "lm1215ActionFailed": "No se pudo completar: {detail}",
-  "@lm1215ActionFailed": {"placeholders": {"detail": {"type": "String"}}},
+  "@lm1215ActionFailed": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
   "lm1215JobsTitle": "En curso",
   "lm1215Progress": "{done} de {total}",
-  "@lm1215Progress": {"placeholders": {"done": {"type": "String"}, "total": {"type": "String"}}},
+  "@lm1215Progress": {
+    "placeholders": {
+      "done": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
   "lm1215Pause": "Pausar",
   "lm1215Resume": "Reanudar",
   "lm1215Paused": "En pausa",
   "lm1215JobDone": "{target}: listo",
-  "@lm1215JobDone": {"placeholders": {"target": {"type": "String"}}},
+  "@lm1215JobDone": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
   "lm1215JobFailed": "{target}: falló",
-  "@lm1215JobFailed": {"placeholders": {"target": {"type": "String"}}},
+  "@lm1215JobFailed": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
   "lm1215CatalogTitle": "Catálogo",
   "lm1215Recommended": "Recomendado",
   "lm1215Downloaded": "Descargado",
@@ -6353,7 +6534,13 @@
   "lm1215TooBig": "No cabe en el servidor",
   "lm1215NeedsEngine": "Requiere actualizar el motor",
   "lm1215DownloadStarted": "Descargando {name}",
-  "@lm1215DownloadStarted": {"placeholders": {"name": {"type": "String"}}},
+  "@lm1215DownloadStarted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "lm1215AlreadyDownloaded": "Ya estaba descargado en el servidor",
   "lm1215SearchTitle": "Buscar en Hugging Face",
   "lm1215SearchSubtitle": "Cualquier modelo GGUF; se ajusta al servidor, pero no está probado",
@@ -6361,7 +6548,16 @@
   "lm1215SearchEmpty": "Sin resultados para esa búsqueda",
   "lm1215SearchGated": "Requiere iniciar sesión en Hugging Face",
   "lm1215SearchStats": "{downloads} descargas · {likes} me gusta",
-  "@lm1215SearchStats": {"placeholders": {"downloads": {"type": "String"}, "likes": {"type": "String"}}},
+  "@lm1215SearchStats": {
+    "placeholders": {
+      "downloads": {
+        "type": "String"
+      },
+      "likes": {
+        "type": "String"
+      }
+    }
+  },
   "lm1215FilesTitle": "Elige una versión",
   "lm1215FilesEmpty": "No hay archivos de modelo compatibles en ese repositorio",
   "lm1215FitGpu": "Cabe en la GPU",
@@ -6533,9 +6729,21 @@
   "pw1215ConflictBody": "Se ha modificado en el servidor mientras lo editabas. Si guardas, sustituirás esos cambios.",
   "pw1215Overwrite": "Sobrescribir",
   "pw1215EntryActions": "Acciones de {name}",
-  "@pw1215EntryActions": {"placeholders": {"name": {"type": "String"}}},
+  "@pw1215EntryActions": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pw1215DeleteTitle": "¿Borrar «{name}»?",
-  "@pw1215DeleteTitle": {"placeholders": {"name": {"type": "String"}}},
+  "@pw1215DeleteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pw1215DeleteFileBody": "Se borrará del servidor y no se puede deshacer.",
   "pw1215DeleteFolderBody": "Solo se borra si la carpeta está vacía. No se puede deshacer.",
   "pw1215Deleted": "Borrado.",
@@ -6548,11 +6756,11 @@
   "pw1215FilesReadOnlyConnection": "Conexión de solo lectura: puedes ver los archivos, pero no cambiarlos.",
   "cr1215AwaitingUnseenInput": "Hermes espera tu respuesta a una pregunta que no se ha mostrado.",
   "cr1215ShowQuestion": "Mostrar pregunta",
-"ss1215StatusWorking": "Trabajando…",
+  "ss1215StatusWorking": "Trabajando…",
   "cq1215QuestionNotRecovered": "No se ha podido recuperar la pregunta. Hermes sigue esperando tu respuesta.",
   "cq1215RetryQuestion": "Reintentar",
   "cq1215StopTurn": "Detener turno",
-"tg1215ProcessCompleted": "Proceso en segundo plano terminado",
+  "tg1215ProcessCompleted": "Proceso en segundo plano terminado",
   "tg1215ProcessExited": "Proceso en segundo plano terminado con error",
   "tg1215ProcessTerminated": "Proceso en segundo plano detenido",
   "tg1215ProcessLost": "Proceso en segundo plano perdido",
@@ -6569,37 +6777,94 @@
   "tg1215ProcessHideOutput": "Ocultar salida",
   "tg1215ProcessNoOutput": "Sin salida",
   "tg1215TurnCancelled": "Cancelado",
-"qr1215QueueRetryExhausted": "No se pudo enviar — Reintentar",
+  "qr1215QueueRetryExhausted": "No se pudo enviar — Reintentar",
   "hr1215AuthExpiredTitle": "La sesión de {provider} ha caducado",
-  "@hr1215AuthExpiredTitle": {"placeholders": {"provider": {"type": "String"}}},
+  "@hr1215AuthExpiredTitle": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "hr1215AuthExpiredTitleGeneric": "La sesión del proveedor ha caducado",
   "hr1215AuthExpiredBody": "El proveedor ha rechazado el acceso porque la sesión ha caducado o se ha revocado. Vuelve a iniciar sesión y reintenta el mensaje.",
   "hr1215KeyRejectedTitle": "Revisa la clave de {provider}",
-  "@hr1215KeyRejectedTitle": {"placeholders": {"provider": {"type": "String"}}},
+  "@hr1215KeyRejectedTitle": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "hr1215KeyRejectedTitleGeneric": "Revisa la clave del proveedor",
   "hr1215KeyRejectedBody": "El proveedor ha rechazado la clave guardada. Cámbiala en Modelos y reintenta el mensaje.",
   "hr1215SignInAgain": "Volver a iniciar sesión",
   "hr1215CheckKey": "Revisar la clave",
   "hr1215ExternalTitle": "Iniciar sesión en {provider}",
-  "@hr1215ExternalTitle": {"placeholders": {"provider": {"type": "String"}}},
+  "@hr1215ExternalTitle": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "hr1215ExternalBody": "Hermes solo puede renovar esta sesión desde la terminal del servidor. Ejecuta allí:\n\n{command}\n\nDespués pulsa «Ya he iniciado sesión».",
-  "@hr1215ExternalBody": {"placeholders": {"command": {"type": "String"}}},
+  "@hr1215ExternalBody": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
   "hr1215ExternalBodyNoCommand": "Hermes solo puede renovar esta sesión desde la terminal del servidor. Cuando hayas iniciado sesión allí, pulsa «Ya he iniciado sesión».",
   "hr1215CopyCommand": "Copiar comando",
   "hr1215CommandCopied": "Comando copiado",
   "hr1215SignedInCheck": "Ya he iniciado sesión",
   "hr1215StillSignedOut": "{provider} sigue sin sesión en el servidor.",
-  "@hr1215StillSignedOut": {"placeholders": {"provider": {"type": "String"}}},
+  "@hr1215StillSignedOut": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "hr1215SignedInAgain": "Sesión de {provider} renovada",
-  "@hr1215SignedInAgain": {"placeholders": {"provider": {"type": "String"}}},
+  "@hr1215SignedInAgain": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "hr1215CompactionAuthTitle": "La compactación no puede usar {provider}; el chat sigue funcionando",
-  "@hr1215CompactionAuthTitle": {"placeholders": {"provider": {"type": "String"}}},
+  "@hr1215CompactionAuthTitle": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "hr1215CompactionAuthTitleGeneric": "La compactación no puede usar el proveedor; el chat sigue funcionando",
   "hr1215CompactionOnlyAuthBody": "Solo ha fallado el resumen automático de la conversación: no se ha perdido nada y puedes seguir escribiendo. Vuelve a iniciar sesión para que la compactación funcione otra vez. Si ya has vuelto a iniciar sesión y sigue igual, reinicia el servidor de Hermes.",
   "hr1215CheckingSignIn": "Comprobando la sesión de {provider}…",
-  "@hr1215CheckingSignIn": {"placeholders": {"provider": {"type": "String"}}},
+  "@hr1215CheckingSignIn": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "hr1215SignInCheckFailed": "No se pudo comprobar la sesión de {provider}: {error}",
-  "@hr1215SignInCheckFailed": {"placeholders": {"provider": {"type": "String"}, "error": {"type": "String"}}},
+  "@hr1215SignInCheckFailed": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "cs1215CachedTranscript": "Copia guardada · actualizando",
   "profileScopeDefault": "Predeterminado",
   "profileSwitcherTitle": "Cambiar de perfil",
@@ -6616,24 +6881,60 @@
   "t1215PastedContent": "Texto pegado",
   "t1215PastedContentSave": "Guardar",
   "tc1215DiffMoreLines": "Ver {count} líneas más",
-  "@tc1215DiffMoreLines": {"placeholders": {"count": {"type": "int"}}},
+  "@tc1215DiffMoreLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215DiffSemantics": "{name}: {added} líneas añadidas, {removed} eliminadas",
-  "@tc1215DiffSemantics": {"placeholders": {"name": {"type": "String"}, "added": {"type": "int"}, "removed": {"type": "int"}}},
+  "@tc1215DiffSemantics": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "added": {
+        "type": "int"
+      },
+      "removed": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215CopyLatest": "Copiar último mensaje",
   "tc1215CopyFull": "Copiar respuesta completa",
   "tc1215CopyMarkdown": "Copiar Markdown",
   "tc1215CopyCode": "{count, plural, =1{Copiar código} other{Copiar {count} bloques de código}}",
-  "@tc1215CopyCode": {"placeholders": {"count": {"type": "int"}}},
+  "@tc1215CopyCode": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215CopyOptionsHint": "más opciones de copia",
   "tc1215TerminalOutput": "Salida",
   "tc1215OutputShowAll": "Ver todo ({count} líneas)",
-  "@tc1215OutputShowAll": {"placeholders": {"count": {"type": "int"}}},
+  "@tc1215OutputShowAll": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215FilesChanged": "{count, plural, =1{1 archivo cambiado} other{{count} archivos cambiados}}",
-  "@tc1215FilesChanged": {"placeholders": {"count": {"type": "int"}}},
+  "@tc1215FilesChanged": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "au1215CronRunViewOnly": "Ejecución programada sin cerrar: solo lectura",
   "au1215CronRunSendBlocked": "Esta ejecución programada es de solo lectura: no se puede enviar.",
   "au1215BgNeededForAutomation": "Los avisos de cron y Kanban solo llegan con esto activado.",
-"te1215TitleRateLimit": "Límite de uso alcanzado",
+  "te1215TitleRateLimit": "Límite de uso alcanzado",
   "te1215HintRateLimit": "Espera a que se levante el límite o prueba otro modelo.",
   "te1215TitleProviderBusy": "El servicio de IA está ocupado",
   "te1215HintProviderBusy": "El proveedor está limitando las peticiones ahora mismo. Reintenta en un momento o prueba otro modelo.",
@@ -6680,14 +6981,44 @@
   "te1215CopyDetails": "Copiar detalles",
   "te1215DetailsCopied": "Detalles copiados",
   "te1215BillingTitle": "Sin saldo en {provider}",
-  "@te1215BillingTitle": {"placeholders": {"provider": {"type": "String"}}},
+  "@te1215BillingTitle": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "te1215ResetsAt": "Se restablece a las {time} (en {remaining})",
-  "@te1215ResetsAt": {"placeholders": {"time": {"type": "String"}, "remaining": {"type": "String"}}},
+  "@te1215ResetsAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
   "te1215RetryAt": "Reintentar a las {time}",
-  "@te1215RetryAt": {"placeholders": {"time": {"type": "String"}}},
+  "@te1215RetryAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "te1215RetryArmed": "Reintento a las {time} (en {remaining})",
-  "@te1215RetryArmed": {"placeholders": {"time": {"type": "String"}, "remaining": {"type": "String"}}},
-"se1215DateThisWeek": "Esta semana",
+  "@te1215RetryArmed": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "se1215DateThisWeek": "Esta semana",
   "se1215DateLastWeek": "Semana pasada",
   "se1215DateThisMonth": "Este mes",
   "se1215SortBy": "Ordenar por",
@@ -6705,7 +7036,13 @@
   "se1215ExportTooLarge": "Conversación demasiado grande para exportar desde el móvil",
   "se1215ExportFailed": "No se pudo exportar",
   "se1215MovedTo": "Movido a {project}",
-  "@se1215MovedTo": {"placeholders": {"project": {"type": "String"}}},
+  "@se1215MovedTo": {
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
   "pj1215PromptsAction": "Prompts",
   "pj1215PromptsEmpty": "Aún no hay prompts en este chat.",
   "pj1215StickyPromptLabel": "Prompt de esta respuesta; toca para ir a él",
@@ -6713,14 +7050,26 @@
   "voiceGptLiveFallbackNoticeNoReason": "GPT-Live no disponible. Uso la voz por turnos.",
   "voiceGptLiveEnded": "Sesión de voz en vivo terminada",
   "voiceGptLiveEndedWithReason": "Sesión de voz en vivo terminada: {reason}",
-  "@voiceGptLiveEndedWithReason": {"placeholders": {"reason": {"type": "String"}}},
+  "@voiceGptLiveEndedWithReason": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "voiceGptLiveReasonConnectionLost": "se perdió la conexión",
   "voiceGptLiveReasonClosed": "la sesión se cerró",
   "voiceGptLiveReasonAudio": "el audio se interrumpió",
   "voiceGptLiveReasonLeft": "saliste del chat o de la app",
   "voiceGptLiveCouldNotStart": "No se pudo iniciar GPT-Live",
   "voiceGptLiveCouldNotStartDetail": "No se pudo iniciar GPT-Live: {detail}",
-  "@voiceGptLiveCouldNotStartDetail": {"placeholders": {"detail": {"type": "String"}}},
+  "@voiceGptLiveCouldNotStartDetail": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
   "voiceGptLiveDelegationFailed": "Lo siento, no pude contactar con Hermes para esa petición.",
   "tc1215SlashDescBtw": "Pregunta algo sin interrumpir la respuesta",
   "tc1215SlashArgBtw": "<pregunta>",
@@ -6789,7 +7138,16 @@
   "sesBranchesCurrent": "Esta conversación",
   "sesBranchesLoadMore": "Cargar más",
   "sesPrTag": "PR #{number} · {state}",
-  "@sesPrTag": {"placeholders": {"number": {"type": "int"}, "state": {"type": "String"}}},
+  "@sesPrTag": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "state": {
+        "type": "String"
+      }
+    }
+  },
   "sesPrStateDraft": "borrador",
   "sesPrStateOpen": "abierto",
   "sesPrStateMerged": "fusionado",
@@ -6802,31 +7160,67 @@
   "fsImportSearchHint": "Buscar por título, carpeta o texto",
   "fsImportSearchClear": "Borrar búsqueda",
   "fsImportReadingFrom": "Leyendo de {host}",
-  "@fsImportReadingFrom": {"placeholders": {"host": {"type": "String"}}},
+  "@fsImportReadingFrom": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
   "fsImportUnreadable": "Algunos registros estaban vacíos, ilegibles o eran demasiado grandes para la vista previa.",
   "fsImportEmpty": "No se encontraron sesiones.",
   "fsImportLoadFailed": "No se pudieron leer las sesiones. Toca para reintentar.",
   "fsImportLoadMore": "Cargar más",
   "fsImportTurns": "{count} turnos",
-  "@fsImportTurns": {"placeholders": {"count": {"type": "int"}}},
+  "@fsImportTurns": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "fsImportCopyNote": "Copia el texto de la conversación. Los archivos originales no cambian. La salida de herramientas y el razonamiento no se copian.",
   "fsImportAlreadyNote": "Esta conversación ya está en Hermes. Abre tu copia para continuar.",
   "fsImportContinue": "Continuar en Hermes",
   "fsImportOpen": "Abrir en Hermes",
   "fsImportTruncated": "Mostrando los últimos turnos de {total}.",
-  "@fsImportTruncated": {"placeholders": {"total": {"type": "int"}}},
+  "@fsImportTruncated": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "fsImportPreviewFailed": "No se pudo leer esta sesión.",
   "fsImportFailed": "No se pudo importar la sesión.",
   "fsImportRoleUser": "Tú",
   "fsImportRoleAssistant": "Asistente",
   "fsImportUntitled": "Sin título",
   "embedLoad": "Cargar {service}",
-  "@embedLoad": {"placeholders": {"service": {"type": "String"}}},
+  "@embedLoad": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
   "embedLoadNote": "Al cargar se conecta con {service}.",
-  "@embedLoadNote": {"placeholders": {"service": {"type": "String"}}},
+  "@embedLoadNote": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
   "embedLoadOnce": "Cargar solo esta vez",
   "embedAlwaysAllow": "Permitir siempre {service}",
-  "@embedAlwaysAllow": {"placeholders": {"service": {"type": "String"}}},
+  "@embedAlwaysAllow": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
   "embedSettingsTitle": "Contenido incrustado",
   "embedSettingsSubtitle": "Vídeos, mapas y gráficos dentro del chat",
   "embedSettingsIntro": "Cargar contenido incrustado contacta con terceros (tu IP, el navegador). Cada tipo está desactivado hasta que lo actives aquí. Este ajuste es solo de este dispositivo.",
@@ -6857,11 +7251,26 @@
   "backupRestorePick": "Restaurar desde un archivo",
   "backupRestoreTitle": "Restaurar copia",
   "backupRestoreCounts": "{count} archivos · {size}",
-  "@backupRestoreCounts": {"placeholders": {"count": {"type": "int"}, "size": {"type": "String"}}},
+  "@backupRestoreCounts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "backupReplacesTitle": "Se reemplazará",
   "backupKeptTitle": "Se conserva",
   "backupOtherFiles": "{count} archivos más",
-  "@backupOtherFiles": {"placeholders": {"count": {"type": "int"}}},
+  "@backupOtherFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "backupItemConfig": "Ajustes (config.yaml)",
   "backupItemEnv": "Claves (.env)",
   "backupItemAuth": "Inicios de sesión (auth.json)",
@@ -6871,7 +7280,13 @@
   "backupItemCron": "Tareas programadas",
   "backupItemProfiles": "Perfiles",
   "backupRestoreWarn": "Se reemplazarán los archivos de {profile}. Las conversaciones registradas después de esta copia se perderán.",
-  "@backupRestoreWarn": {"placeholders": {"profile": {"type": "String"}}},
+  "@backupRestoreWarn": {
+    "placeholders": {
+      "profile": {
+        "type": "String"
+      }
+    }
+  },
   "backupSafetyFirst": "Hacer antes una copia del estado actual",
   "backupRestoreAction": "Restaurar",
   "backupRestoreDone": "Restauración terminada",
@@ -6894,7 +7309,13 @@
   "mdlEndpointActivate": "Activar",
   "mdlEndpointDelete": "Eliminar",
   "mdlEndpointDeleteTitle": "¿Eliminar {name}?",
-  "@mdlEndpointDeleteTitle": {"placeholders": {"name": {"type": "String"}}},
+  "@mdlEndpointDeleteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "mdlEndpointSave": "Guardar endpoint",
   "mdlEndpointSaveAndUse": "Guardar y usar",
   "mdlAddEndpoint": "Añadir endpoint",
@@ -6905,11 +7326,41 @@
   "mdlCredentialPoolEmptyBody": "Este perfil no tiene credenciales rotatorias.",
   "mdlCredentialPoolLoadError": "No se pudo cargar el grupo de credenciales.",
   "mdlCredentialPoolKeyNumber": "Clave n.º {index}",
-  "@mdlCredentialPoolKeyNumber": {"placeholders": {"index": {"type": "int"}}},
+  "@mdlCredentialPoolKeyNumber": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
   "mdlCredentialPoolEntryDetails": "{authType} · {source} · {status} · {requests} solicitudes · prioridad {priority}",
-  "@mdlCredentialPoolEntryDetails": {"placeholders": {"authType": {"type": "String"}, "source": {"type": "String"}, "status": {"type": "String"}, "requests": {"type": "int"}, "priority": {"type": "int"}}},
+  "@mdlCredentialPoolEntryDetails": {
+    "placeholders": {
+      "authType": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      },
+      "requests": {
+        "type": "int"
+      },
+      "priority": {
+        "type": "int"
+      }
+    }
+  },
   "mdlFreeTierNotice": "Hay modelos gratuitos disponibles en este servidor · {label}",
-  "@mdlFreeTierNotice": {"placeholders": {"label": {"type": "String"}}},
+  "@mdlFreeTierNotice": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "mdlFreeTierSignIn": "Iniciar sesión",
   "mdlFreeTierDismiss": "Descartar",
   "pc1215NewProject": "Nuevo proyecto",
@@ -6926,13 +7377,25 @@
   "pc1215Create": "Crear",
   "pc1215CreateFailed": "No se pudo crear el proyecto",
   "pc1215CoveredTitle": "Ya está en «{name}»",
-  "@pc1215CoveredTitle": {"placeholders": {"name": {"type": "String"}}},
+  "@pc1215CoveredTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pc1215CoveredBody": "Esta carpeta ya forma parte de un proyecto. Puedes abrirlo en vez de crear otro.",
   "pc1215CoveredAutoBody": "Hermes ya detectó esta carpeta como proyecto. Puedes abrirlo o crear un proyecto con nombre propio para ella.",
   "pc1215CoveredOpen": "Abrir proyecto",
   "pc1215CoveredAdd": "Crear igualmente",
   "pc1215FolderAdded": "Carpeta añadida a «{name}»",
-  "@pc1215FolderAdded": {"placeholders": {"name": {"type": "String"}}},
+  "@pc1215FolderAdded": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pc1215OpenFolderFailed": "No se pudo crear el proyecto; se abre la carpeta igualmente.",
   "pc1215PickFolderTitle": "Elegir carpeta del servidor",
   "pc1215PickFolderUse": "Usar esta carpeta",
@@ -6943,14 +7406,41 @@
   "apx1215ScopeAlwaysHint": "Este tipo de comando en todos los chats. Se guarda en el servidor (command_allowlist de config.yaml) y en Ajustes › Permisos / Aprobaciones; para retirarlo, quítalo de ambos sitios.",
   "rpl1215AskAboutThis": "Preguntar sobre esto",
   "tc1215TurnChangesChip": "{count, plural, =1{1 archivo} other{{count} archivos}}",
-  "@tc1215TurnChangesChip": {"placeholders": {"count": {"type": "int"}}},
+  "@tc1215TurnChangesChip": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215DiffHunkLines": "Líneas {start}–{end}",
-  "@tc1215DiffHunkLines": {"placeholders": {"start": {"type": "int"}, "end": {"type": "int"}}},
+  "@tc1215DiffHunkLines": {
+    "placeholders": {
+      "start": {
+        "type": "int"
+      },
+      "end": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215DiffHunkLine": "Línea {line}",
-  "@tc1215DiffHunkLine": {"placeholders": {"line": {"type": "int"}}},
+  "@tc1215DiffHunkLine": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      }
+    }
+  },
   "tc1215DiffViewed": "Visto",
   "tc1215DiffViewedSemantics": "Marcar {name} como visto",
-  "@tc1215DiffViewedSemantics": {"placeholders": {"name": {"type": "String"}}},
+  "@tc1215DiffViewedSemantics": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "tc1215TurnChangesDone": "Hecho",
   "cmp1215PasteImage": "Pegar imagen",
   "mc1215WrapLines": "Ajustar líneas largas",
@@ -6959,10 +7449,22 @@
   "mc1215FontLarger": "Código más grande",
   "mc1215OpenInViewer": "Abrir en el visor",
   "mc1215CodeTitle": "Código · {language}",
-  "@mc1215CodeTitle": {"placeholders": {"language": {"type": "String"}}},
+  "@mc1215CodeTitle": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
   "mc1215ViewerActions": "Acciones del visor",
   "cb1215ShowAllLines": "Mostrar todo ({count} líneas)",
-  "@cb1215ShowAllLines": {"placeholders": {"count": {"type": "int"}}},
+  "@cb1215ShowAllLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "cb1215ShowLess": "Mostrar menos",
   "cb1215PlainCode": "texto",
   "cs1215PinnedPromptYou": "Tú",
@@ -7583,13 +8085,40 @@
   "plv1215Depleted": "Sin saldo: recarga para seguir",
   "plv1215Details": "Detalles del proveedor",
   "plv1215Left": "Quedan {percent} %",
-  "@plv1215Left": {"placeholders": {"percent": {"type": "int"}}},
+  "@plv1215Left": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "plv1215ResetsIn": "Se reinicia en {time}",
-  "@plv1215ResetsIn": {"placeholders": {"time": {"type": "String"}}},
+  "@plv1215ResetsIn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "plv1215Of": "{amount} de {total}",
-  "@plv1215Of": {"placeholders": {"amount": {"type": "String"}, "total": {"type": "String"}}},
+  "@plv1215Of": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
   "plv1215BankedResets": "{count, plural, =1{Tienes 1 reinicio guardado} other{Tienes {count} reinicios guardados}}",
-  "@plv1215BankedResets": {"placeholders": {"count": {"type": "int"}}},
+  "@plv1215BankedResets": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "thTaglineConsole": "grafito · terracota",
   "thTaglineConsoleLight": "porcelana · terracota",
   "thTaglineAmber": "grafito suave · la firma",
@@ -8428,12 +8957,33 @@
   "pb1215SearchInProjectHint": "Buscar en esta carpeta",
   "pb1215SearchClear": "Borrar búsqueda",
   "pb1215ChatCount": "{count, plural, =0{Sin chats todavía} one{1 chat} other{{count} chats}}",
-  "@pb1215ChatCount": {"placeholders": {"count": {"type": "int"}}},
+  "@pb1215ChatCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "pb1215OtherChats": "Otros chats",
   "pb1215OtherChatsCount": "{count, plural, one{1 chat sin carpeta} other{{count} chats sin carpeta}}",
-  "@pb1215OtherChatsCount": {"placeholders": {"count": {"type": "int"}}},
+  "@pb1215OtherChatsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "pb1215FolderSemantics": "Carpeta {label}. {summary}",
-  "@pb1215FolderSemantics": {"placeholders": {"label": {"type": "String"}, "summary": {"type": "String"}}},
+  "@pb1215FolderSemantics": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "summary": {
+        "type": "String"
+      }
+    }
+  },
   "pb1215FolderOptions": "Opciones del proyecto",
   "pb1215FoldersSection": "Carpetas",
   "pb1215ChatsSection": "Chats",
@@ -8444,7 +8994,13 @@
   "pb1215EmptyFolderBody": "Pulsa + para empezar uno aquí: trabajará dentro de esta carpeta.",
   "pb1215EmptyFolderReadOnly": "Los chats que se abran en esta carpeta aparecerán aquí.",
   "pb1215NoResults": "Nada coincide con «{query}»",
-  "@pb1215NoResults": {"placeholders": {"query": {"type": "String"}}},
+  "@pb1215NoResults": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
   "pb1215NewChatTooltip": "Nuevo chat en esta carpeta",
   "pb1215NewProjectTooltip": "Nuevo proyecto",
   "pb1215EmptyBody": "Un proyecto es una carpeta del servidor donde trabajan tus chats. Crea uno para empezar.",
@@ -8491,9 +9047,21 @@
   "fp1215KeepEditing": "Seguir editando",
   "fp1215Discard": "Descartar",
   "fp1215ProjectPathPreview": "Los chats nuevos se abrirán en {path}",
-  "@fp1215ProjectPathPreview": {"placeholders": {"path": {"type": "String"}}},
+  "@fp1215ProjectPathPreview": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "fp1215IdeaPathPreview": "Se guardará como {path}",
-  "@fp1215IdeaPathPreview": {"placeholders": {"path": {"type": "String"}}},
+  "@fp1215IdeaPathPreview": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "fp1215NextRuns": "Próximas ejecuciones",
   "fp1215NameLabel": "Nombre",
   "chatModelCatalogStale": "Lista anterior sin confirmar.",
@@ -8546,7 +9114,13 @@
   "voiceEngineProbeFailed": "No se pudo comprobar si este servidor ofrece GPT-Live.",
   "voiceServerTestFailedShort": "La prueba falló",
   "voiceServerTestMissingKey": "Falta la clave de {provider} en el servidor",
-  "@voiceServerTestMissingKey": {"placeholders": {"provider": {"type": "String"}}},
+  "@voiceServerTestMissingKey": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "voiceServerTestMissingKeyGeneric": "Falta una clave en el servidor",
   "voiceServerTestResponseLabel": "Respuesta del servidor",
   "voiceMainConversation": "Conversación de voz",
@@ -8554,9 +9128,21 @@
   "voiceMainDictation": "Dictado",
   "voiceMainReplyVoice": "Voz de las respuestas",
   "voiceProblemTapDictation": "{problem}. Toca Dictado.",
-  "@voiceProblemTapDictation": {"placeholders": {"problem": {"type": "String"}}},
+  "@voiceProblemTapDictation": {
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
   "voiceProblemTapReplyVoice": "{problem}. Toca Voz de las respuestas.",
-  "@voiceProblemTapReplyVoice": {"placeholders": {"problem": {"type": "String"}}},
+  "@voiceProblemTapReplyVoice": {
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
   "voiceProblemDictationModel": "Falta descargar el modelo de dictado",
   "voiceProblemDictationServer": "El dictado no puede usar el servidor ahora",
   "voiceProblemVoiceModel": "Falta descargar la voz",
@@ -8565,7 +9151,13 @@
   "voiceChatModeSaveFailed": "No se pudo cambiar la conversación de voz en el servidor.",
   "voiceServerAddKey": "Añadir clave",
   "voiceServerKeyTitle": "Clave de {provider}",
-  "@voiceServerKeyTitle": {"placeholders": {"provider": {"type": "String"}}},
+  "@voiceServerKeyTitle": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "voiceServerKeyMessage": "Se guarda en tu servidor Hermes, no en este teléfono.",
   "voiceServerKeyHint": "Pega aquí la clave",
   "voiceServerAlsoListens": "En la conversación de voz, el servidor también te escucha.",
@@ -8579,11 +9171,23 @@
   "voiceRowEcho": "Eco de transcripciones",
   "voiceRowLiveTranscription": "Transcripción en directo",
   "voiceSecondsValue": "{seconds} s",
-  "@voiceSecondsValue": {"placeholders": {"seconds": {"type": "String"}}},
+  "@voiceSecondsValue": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
   "voiceDownloadAction": "Descargar",
   "voiceRemoveDownload": "Borrar descarga",
   "voiceNeedsDownload": "Descarga de {mb} MB",
-  "@voiceNeedsDownload": {"placeholders": {"mb": {"type": "String"}}},
+  "@voiceNeedsDownload": {
+    "placeholders": {
+      "mb": {
+        "type": "String"
+      }
+    }
+  },
   "voicePersonalityHint": "Cómo debe hablar y comportarse",
   "voicePersonalityDefault": "Por defecto",
   "voiceChangeLanguage": "Cambiar idioma",
@@ -8838,5 +9442,11 @@
   "onb4ManualBody": "Escribe la dirección, el usuario y la contraseña que te mostró la instalación al terminar.",
   "drawerRenameHint": "Mantén pulsada una instancia para renombrarla",
   "drawerRenameTitle": "Renombrar instancia",
-  "drawerRenameField": "Nombre visible"
+  "drawerRenameField": "Nombre visible",
+  "setServerOs": "SO del servidor",
+  "setServerOsNote": "Sistema que ejecuta el host de Hermes. Automático lo detecta por las carpetas que devuelve el servidor.",
+  "serverOsAuto": "Automático",
+  "serverOsWindows": "Windows",
+  "serverOsLinux": "Linux",
+  "serverPathGoTo": "Ir a la ruta"
 }

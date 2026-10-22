@@ -23,6 +23,8 @@ import '../settings/settings_deep_link.dart';
 import '../settings/settings_list_detail.dart';
 import '../settings/settings_sections.dart';
 import '../services/session_deletion.dart';
+import '../services/server_os_pref.dart';
+import '../utils/server_paths.dart';
 import '../services/turn_outbox_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/motion.dart';
@@ -263,6 +265,7 @@ class SettingsScreen extends StatelessWidget {
             _ThemesEntry(),
             _FontStyleEntry(),
             _LanguageEntry(),
+            _ServerOsEntry(),
             _HeaderTitleField(),
             _UseDockTile(),
             _DockTile(),
@@ -941,6 +944,63 @@ class _LanguageEntryState extends State<_LanguageEntry> {
                   : o.label,
               selected: o.id == current,
               onTap: () => _select(o.id),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Server OS selector for the folder browser. Auto (default) inspects the
+/// paths the file endpoints return; the explicit values force one style.
+class _ServerOsEntry extends StatefulWidget {
+  @override
+  State<_ServerOsEntry> createState() => _ServerOsEntryState();
+}
+
+class _ServerOsEntryState extends State<_ServerOsEntry> {
+  ServerOs? _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() => _value = ServerOsPref.read(prefs));
+  }
+
+  Future<void> _select(ServerOs value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await ServerOsPref.write(prefs, value);
+    if (mounted) setState(() => _value = value);
+  }
+
+  String _label(Strings s, ServerOs value) => switch (value) {
+    ServerOs.auto => s.serverOsAuto,
+    ServerOs.windows => s.serverOsWindows,
+    ServerOs.linux => s.serverOsLinux,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final s = Strings.of(context);
+    return _PrefField(
+      title: s.setServerOs,
+      caption: s.setServerOsNote,
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          for (final value in ServerOs.values)
+            _Choice(
+              label: _label(s, value),
+              selected: (_value ?? ServerOs.auto) == value,
+              onTap: () => _select(value),
             ),
         ],
       ),

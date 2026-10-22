@@ -1,3 +1,4 @@
+import '../utils/server_paths.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -843,9 +844,8 @@ class GeneratedMediaService {
 
   static bool _isSafeServerPath(String source) {
     if (source.length > 2048 ||
-        !source.startsWith('/') ||
+        !ServerPath.isAbsolute(source) ||
         source.startsWith('//') ||
-        source.contains('\\') ||
         source.contains(RegExp(r'[\x00-\x1f\x7f]')) ||
         source.contains('?') ||
         source.contains('#')) {

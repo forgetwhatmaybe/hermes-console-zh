@@ -1,3 +1,4 @@
+import '../utils/server_paths.dart';
 import 'dart:convert';
 
 import '../models/desktop_session_snapshot.dart';
@@ -1031,7 +1032,7 @@ String _truncateRunes(String value, int maximum) {
 
 String? _normalizeAbsolutePath(String raw) {
   final value = raw.trim();
-  if (!value.startsWith('/') ||
+  if (!ServerPath.isAbsolute(value) ||
       value.length > 2048 ||
       _hasControl(value) ||
       value.contains('?') ||
@@ -1039,7 +1040,7 @@ String? _normalizeAbsolutePath(String raw) {
     return null;
   }
   final segments = <String>[];
-  for (final segment in value.split('/')) {
+  for (final segment in value.split(RegExp(r'[\\/]'))) {
     if (segment.isEmpty || segment == '.') continue;
     late final String decoded;
     try {
@@ -1052,7 +1053,9 @@ String? _normalizeAbsolutePath(String raw) {
     }
     segments.add(segment);
   }
-  return '/${segments.join('/')}';
+  final sep = ServerPath.looksWindows(value) ? '\\' : '/';
+  final root = ServerPath.rootOf(value);
+  return root == '/' ? '/${segments.join(sep)}' : '$root${segments.join(sep)}';
 }
 
 bool _isWithinPrefix(String path, String prefix) =>
