@@ -81,3 +81,8 @@ releases/
 /.serena/
 /.rollback-snapshots/
 /docs/agent-handoffs/
+
+# Fork local build secrets / working dirs
+*.jks
+*.p12
+.zh/

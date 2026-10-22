@@ -468,6 +468,17 @@ class HermesDrawer extends StatelessWidget {
                     activeConnectionId:
                         connManager.activeConnectionId.value ?? conn?.id,
                     onSelected: (id) => _selectInstance(context, id),
+                    onRename: (saved, name) async {
+                      await connManager.updateConnection(
+                        saved.id,
+                        label: name,
+                        host: saved.host,
+                        port: saved.port,
+                        useHttps: saved.useHttps,
+                        kind: saved.kind,
+                      );
+                      if (context.mounted) Navigator.of(context).pop();
+                    },
                   ),
                   // Active profile, one tap from the drawer (Desktop rail).
                   if (conn != null)
@@ -895,6 +906,7 @@ class _DrawerHeader extends StatelessWidget {
   final List<SavedConnection> connections;
   final String? activeConnectionId;
   final ValueChanged<String> onSelected;
+  final Future<void> Function(SavedConnection saved, String name) onRename;
 
   const _DrawerHeader({
     required this.connectionLabel,
@@ -904,7 +916,45 @@ class _DrawerHeader extends StatelessWidget {
     required this.connections,
     required this.activeConnectionId,
     required this.onSelected,
+    required this.onRename,
   });
+
+  Future<void> _renameInstance(
+    BuildContext context,
+    SavedConnection saved,
+  ) async {
+    final s = Strings.of(context);
+    final controller = TextEditingController(text: saved.label);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(s.drawerRenameTitle),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          decoration: InputDecoration(labelText: s.drawerRenameField),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(s.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: Text(s.commonSave),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    final trimmed = name?.trim() ?? '';
+    if (trimmed.isEmpty || trimmed == saved.label) return;
+    await onRename(saved, trimmed);
+  }
+
+  String _instanceEndpoint(SavedConnection c) => '${c.host}:${c.port}';
 
   @override
   Widget build(BuildContext context) {
@@ -959,13 +1009,29 @@ class _DrawerHeader extends StatelessWidget {
         menuChildren: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-            child: Text(
-              Strings.of(context).drawerSwitchInstance,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(color: colors.textSecondary),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  Strings.of(context).drawerSwitchInstance,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelLarge?.copyWith(color: colors.textSecondary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  Strings.of(context).drawerRenameHint,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.textDisabled,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
             ),
           ),
           for (final saved in connections)
@@ -993,14 +1059,34 @@ class _DrawerHeader extends StatelessWidget {
                 ),
               ),
               onPressed: () => onSelected(saved.id),
-              child: Text(
-                saved.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onLongPress: () => _renameInstance(context, saved),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      saved.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      _instanceEndpoint(saved),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

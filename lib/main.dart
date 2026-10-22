@@ -544,6 +544,7 @@ class AppLocales {
     AppLocaleOption('system', 'Sistema', null),
     AppLocaleOption('es', 'Español', Locale('es')),
     AppLocaleOption('en', 'English', Locale('en')),
+    AppLocaleOption('zh', '中文', Locale('zh')),
   ];
 
   static AppLocaleOption byId(String? id) =>
@@ -3123,6 +3124,7 @@ class HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
               // nulo → llega el idioma del dispositivo).
               localeResolutionCallback: (locale, supported) {
                 if (locale?.languageCode == 'es') return const Locale('es');
+                if (locale?.languageCode == 'zh') return const Locale('zh');
                 return const Locale('en');
               },
               theme: AppFonts.applyToTheme(activeTheme, AppFonts.byId(font)),

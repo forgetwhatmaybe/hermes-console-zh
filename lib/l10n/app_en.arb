@@ -6957,5 +6957,8 @@
   "onb4HelpSafe": "It uses the official Hermes installer. If you already have Hermes, it doesn't touch it, nor Telegram or the Gateway. It takes a few minutes.",
   "onb4HelpVps": "Hermes on an internet server? Install Tailscale on the server and on this phone, then paste the line.",
   "onb4HadPassword": "This Hermes already had a password. Type it once and Console doesn't keep it.",
-  "onb4ManualBody": "Type the address, the user and the password that the setup showed you when it finished."
+  "onb4ManualBody": "Type the address, the user and the password that the setup showed you when it finished.",
+  "drawerRenameHint": "Long-press an instance to rename it",
+  "drawerRenameTitle": "Rename instance",
+  "drawerRenameField": "Display name"
 }

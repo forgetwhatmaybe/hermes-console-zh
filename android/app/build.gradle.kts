@@ -76,8 +76,8 @@ android {
            // La validación de tareas al final del archivo impide empaquetar una
            // variante release sin la upload key. Nunca se degrada a firma debug.
            signingConfig = signingConfigs.getByName("release")
-           isMinifyEnabled = true
-           isShrinkResources = true
+           isMinifyEnabled = false
+           isShrinkResources = false
            // Incluye tablas de símbolos nativos en el AAB para que Play pueda
            // simbolicar fallos de Flutter/Whisper/Sherpa/ONNX sin distribuir
            // información de depuración en los APK instalados.
