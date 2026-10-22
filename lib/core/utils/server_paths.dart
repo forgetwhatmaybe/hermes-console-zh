@@ -68,7 +68,7 @@ class ServerPath {
     if (_drive.hasMatch(p) && p.length <= 3) return p;
     final sep = _sepFor(p);
     if (_drive.hasMatch(p)) {
-      final root = p.substring(0, 2) + '\\';
+      final root = '${p.substring(0, 2)}\\';
       if (p == root) return root;
       final cut = p.lastIndexOf(sep);
       return cut <= 2 ? root : p.substring(0, cut);
@@ -98,7 +98,7 @@ class ServerPath {
   /// Drive root ("C:\") of [path], or "/" for POSIX paths.
   static String rootOf(String path) {
     final p = normalize(path);
-    if (_drive.hasMatch(p)) return p.substring(0, 2) + '\\';
+    if (_drive.hasMatch(p)) return '${p.substring(0, 2)}\\';
     return '/';
   }
 
