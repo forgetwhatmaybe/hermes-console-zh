@@ -53,6 +53,10 @@
 | `lib/core/bots/ui/room/room_models.dart` | 房间附件路径校验支持 Windows |
 | `lib/core/screens/settings_screen.dart` | 设置 → 外观 → **服务器系统**：自动 / Windows / Linux（SharedPreferences `server_os`） |
 
+| lib/core/screens/sftp_browser_screen.dart | SFTP 目录 join/parent 改用 ServerPath，Windows 盘符路径可正常上溯 |
+| lib/core/widgets/projects/project_files_browser.dart | 新建文件/文件夹名拒绝 Windows 非法字符与 CON/PRN/NUL 等保留名；Windows 下重名比较忽略大小写 |
+| 附件 / 生成图 / 产物 | attachment_uploader、generated_image_fetch、generated_media_service、artifact_index、session_artifact_download_service 的绝对路径校验同时接受 / 与盘符 |
+
 **原因**：服务端是 Windows 时 `/api/fs/list` 返回 `C:\Users\...`，旧逻辑只认 `/` 前缀，项目文件夹选择器停在根目录、无法进入子目录，选中后也被“非绝对路径”拦截。
 
 **已知限制**：SSH 终端需要 Windows 端自行安装/启用 OpenSSH Server；本地模型、语音、cron 由服务端执行，不属于客户端路径逻辑。

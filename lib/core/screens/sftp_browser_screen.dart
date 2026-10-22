@@ -1,5 +1,6 @@
 // Navegador SFTP sobre la conexión SSH: listar/navegar, descargar, subir y
 // borrar. Respeta el modo solo-lectura de la instancia. App Lock al entrar.
+import '../utils/server_paths.dart';
 import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -143,17 +144,9 @@ class _SftpBrowserScreenState extends State<SftpBrowserScreen> {
     }
   }
 
-  String _join(String base, String name) =>
-      base == '/' ? '/$name' : '$base/$name';
+  String _join(String base, String name) => ServerPath.join(base, name);
 
-  String _parent(String path) {
-    if (path == '/' || !path.contains('/')) return '/';
-    final trimmed = path.endsWith('/')
-        ? path.substring(0, path.length - 1)
-        : path;
-    final idx = trimmed.lastIndexOf('/');
-    return idx <= 0 ? '/' : trimmed.substring(0, idx);
-  }
+  String _parent(String path) => ServerPath.parent(path);
 
   void _enter(SftpName e) {
     if (!e.attr.isDirectory) return;

@@ -476,8 +476,14 @@ class _ProjectFilesBrowserState extends State<ProjectFilesBrowser> {
     );
   }
 
-  bool _nameTaken(String name) =>
-      widget.controller.listing?.entries.any((e) => e.name == name) ?? false;
+  bool _nameTaken(String name) {
+    final entries = widget.controller.listing?.entries ?? const [];
+    if (widget.controller.root.contains(':')) {
+      final lower = name.toLowerCase();
+      return entries.any((e) => e.name.toLowerCase() == lower);
+    }
+    return entries.any((e) => e.name == name);
+  }
 
   /// Name dialog shared by "Nueva carpeta" and "Nuevo archivo": live
   /// validation like Desktop, "Crear" disabled until the name is usable.
