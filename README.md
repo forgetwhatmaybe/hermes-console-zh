@@ -1,3 +1,7 @@
+> **这是个人修改版，不是官方仓库。**
+> 基于 [xP3ta/hermes-console](https://github.com/xP3ta/hermes-console) 1.3.0（commit `7c51c99`），增加**简体中文**与 **Switch instance 实例别名**。
+> 改动清单、构建方法、上游 diff / 同步步骤见 **[FORK_NOTES.md](FORK_NOTES.md)**。许可证 GPL-3.0，版权归原作者。
+
 <p align="center">
   <a href="https://hermes.xpetalab.dev"><img src="assets/branding/console_banner.png" width="100%" alt="Console, the Android app for your self-hosted Hermes Agent" /></a>
 </p>
