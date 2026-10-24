@@ -427,6 +427,22 @@
   "chaContextUsageError": "The breakdown couldn't be loaded. The usage summary is still available.",
   "chaContextUsageEmpty": "Hermes returned no categories for this session.",
   "chaContextTotal": "Session total tokens",
+  "turnTokens": "{count} tokens",
+  "@turnTokens": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "turnRate": "{rate} tok/s",
+  "@turnRate": {
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
   "chaContextCategorySystem": "System prompt",
   "chaContextCategoryTools": "Tool definitions",
   "chaContextCategoryRules": "Project rules",

@@ -21,6 +21,7 @@ class ChatMessageFrame extends StatelessWidget {
     required this.children,
     this.header,
     this.time,
+    this.trailing,
     this.selectable = true,
     this.selectionIdentity,
     this.askable = false,
@@ -43,6 +44,10 @@ class ChatMessageFrame extends StatelessWidget {
   /// Hora ya formateada (ver [formatChatMessageTime]); `null` omite el pie.
   final String? time;
 
+  /// 时间右侧的附加页脚（例如 «1,234 tokens · 56 tok/s»）。
+  /// 已带页脚 meta 样式；为 `null` 时不添加任何内容。
+  final Widget? trailing;
+
   /// Habilita la selección parcial (se deshabilita durante el streaming).
   final bool selectable;
 
@@ -62,6 +67,7 @@ class ChatMessageFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final header = this.header;
     final time = this.time;
+    final trailing = this.trailing;
     return ChatMessageSelectionArea(
       enabled: selectable,
       selectionIdentity: selectionIdentity,
@@ -77,7 +83,18 @@ class ChatMessageFrame extends StatelessWidget {
                 child: header,
               ),
             ...children,
-            if (time != null) ChatMessageTimestamp(time),
+            if (time != null || trailing != null)
+              // 用 Wrap 而不是 Row：320 dp 宽、文字 130% 时，时间和本轮用量
+              // 一行放不下，会折到下一行而不会溢出。`spacing` 保持两者之间那 6 px。
+              Wrap(
+                spacing: 6,
+                runSpacing: 2,
+                crossAxisAlignment: WrapCrossAlignment.start,
+                children: [
+                  if (time != null) ChatMessageTimestamp(time),
+                  ?trailing,
+                ],
+              ),
           ],
         ),
       ),

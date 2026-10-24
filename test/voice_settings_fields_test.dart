@@ -805,20 +805,22 @@ void main() {
       );
     });
 
-    testWidgets('a server without transcription cannot be chosen', (
-      tester,
-    ) async {
+    testWidgets('a server without transcription explains why it cannot be '
+        'chosen', (tester) async {
       final server = _Server(config: openAiVoice(), voice: false);
       final (voice, _) = await open(tester, server);
       await openPage(tester, 'dictation');
 
-      expect(opens(tester, 'voice_dictation_server_option'), isFalse);
-      await tester.tap(
-        find.byKey(const ValueKey('voice_dictation_server_option')),
-        warnIfMissed: false,
-      );
-      await tester.pumpAndSettle();
+      // La fila se pulsa siempre: un toque nunca se queda mudo.
+      expect(opens(tester, 'voice_dictation_server_option'), isTrue);
+      await tapKey(tester, 'voice_dictation_server_option');
+      // No se elige, y se dice qué falló y con qué respuesta.
       expect(voice.settings.sttEngine, SttEngineKind.system);
+      expect(find.textContaining('HTTP 404'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('voice_dictation_server_fields')),
+        findsNothing,
+      );
     });
   });
 

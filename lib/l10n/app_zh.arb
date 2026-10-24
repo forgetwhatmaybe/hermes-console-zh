@@ -427,6 +427,22 @@
   "chaContextUsageError": "无法加载分类明细。用量摘要仍然可用。",
   "chaContextUsageEmpty": "Hermes 未返回此会话的任何分类。",
   "chaContextTotal": "会话 Token 总数",
+  "turnTokens": "{count} tokens",
+  "@turnTokens": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "turnRate": "{rate} tok/s",
+  "@turnRate": {
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
   "chaContextCategorySystem": "系统提示词",
   "chaContextCategoryTools": "工具定义",
   "chaContextCategoryRules": "项目规则",

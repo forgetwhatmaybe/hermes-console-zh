@@ -568,6 +568,23 @@ Map<String, dynamic>? normalizeTranscriptMessageForDisplay(
       activityDuration <= 604800) {
     normalized['_activity_duration_seconds'] = activityDuration;
   }
+  // Android 在 `message.complete` 里算好的每轮指标
+  // （tokens/秒数/速率）。UI 直接从消息本身读取，所以归一化
+  // 时不能把它们丢掉。
+  for (final key in const [
+    '_turn_output_tokens',
+    '_turn_total_tokens',
+    '_turn_seconds',
+    '_turn_avg_tps',
+    '_turn_usage_source',
+  ]) {
+    final value = message[key];
+    if (value is num && value.isFinite && value >= 0) {
+      normalized[key] = value;
+    } else if (value is String && value.isNotEmpty && value.length <= 16) {
+      normalized[key] = value;
+    }
+  }
   for (final key in const ['id', 'message_id', 'row_id']) {
     final value = message[key];
     if (value is int && value > 0) {
@@ -3748,6 +3765,32 @@ enum ActiveChatEvent {
   reactionsChanged,
 }
 
+/// 进行中这一轮的用量读数，用于 `liveTurnUsageListenable` 这个窄通道。
+/// `null` 表示该项暂无数据（还没收到 `session.usage` tick）。
+@immutable
+class LiveTurnUsage {
+  const LiveTurnUsage({this.tokens, this.tps});
+
+  /// 本轮输出 tokens（gateway 的精确值）。
+  final int? tokens;
+
+  /// 本轮速率（tokens/秒）。
+  final double? tps;
+
+  bool get hasData => tokens != null || tps != null;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LiveTurnUsage && other.tokens == tokens && other.tps == tps;
+
+  @override
+  int get hashCode => Object.hash(tokens, tps);
+
+  @override
+  String toString() => 'LiveTurnUsage(tokens: $tokens, tps: $tps)';
+}
+
 Future<({Object? error, T? value})> _captureAsync<T>(
   Future<T> Function() operation,
 ) async {
@@ -5530,6 +5573,258 @@ class ActiveChat {
 
   /// Inicio del turno visible (equivalente a turnStartedAt en Desktop).
   DateTime? get desktopTurnStartedAt => _desktopTurnStartedAt;
+
+  // --- 每轮用量采样（tokens、秒数与速率）---
+  //
+  // 只有 gateway 的数据：`message.complete` 带整场会话的累计用量，本轮
+  // 按与 `message.start` 时取的基准值之差计算；实时值只来自
+  // `session.usage` tick。没有 usage 的回合不估算、不写键。
+
+  /// 进行中这一轮的输出 tokens（来自 `session.usage` tick）。无数据为 `null`。
+  int? get liveTurnTokens => _liveTurnTokens;
+
+  /// 进行中这一轮的速率（tokens/秒）；无数据为 `null`。
+  double? get liveTurnTps => _liveTurnTps;
+
+  /// gateway 最近一次发来的 `session.usage`（整场会话的累计值）。
+  Map<String, dynamic> get liveSessionUsage => _liveSessionUsage;
+
+  Map<String, dynamic> _liveSessionUsage = const <String, dynamic>{};
+  Map<String, dynamic>? _turnUsageMetrics;
+  int? _turnUsageBaselineOutput;
+  int? _turnUsageBaselineTotal;
+  int? _liveTurnTokens;
+  double? _liveTurnTps;
+  String? _turnUsageSessionId;
+  bool _turnUsageSettled = false;
+
+  /// 回合 epoch：`message.start` 与每次回合收口都递增。结算只认「采样
+  /// epoch == 当前回合 epoch」的轮：复用同一 runtime 的次轮即使没有
+  /// `message.start`，收口之后 epoch 也已经前进，它的
+  /// `message.complete` 不能拿上一回合的基准值与计时结算。
+  int _turnUsageEpoch = 0;
+
+  /// 当前采样（基准值 + 计时）所属的回合 epoch；`-1` 表示没有在采样。
+  int _turnUsageSamplingEpoch = -1;
+
+  /// [_turnUsageMetrics] 所属的回合 epoch；`-1` 表示没有可挂的指标。
+  int _turnUsageMetricsEpoch = -1;
+  final Stopwatch _turnUsageClock = Stopwatch();
+
+  final ValueNotifier<LiveTurnUsage> _liveTurnUsage =
+      ValueNotifier<LiveTurnUsage>(const LiveTurnUsage());
+
+  /// 实时用量的窄刷新通道：只由 `session.usage` tick 驱动（服务端精确值，
+  /// 不做本地估算），订阅方只重建 footer。值不变时不 notify。
+  ValueListenable<LiveTurnUsage> get liveTurnUsageListenable => _liveTurnUsage;
+
+  void _beginTurnUsageSampling() {
+    final usage = _desktopRuntimeInfo.usage;
+    _turnUsageEpoch += 1;
+    _turnUsageSamplingEpoch = _turnUsageEpoch;
+    _turnUsageSessionId = _desktopRuntimeSessionId;
+    _turnUsageBaselineOutput = usage?.output;
+    _turnUsageBaselineTotal = usage?.total;
+    _turnUsageSettled = false;
+    _turnUsageMetrics = null;
+    _turnUsageMetricsEpoch = -1;
+    _liveTurnTokens = null;
+    _liveTurnTps = null;
+    _publishLiveTurnUsage();
+    _turnUsageClock
+      ..reset()
+      ..start();
+  }
+
+  /// 换 runtime（重连、换会话）后不能把上一轮的
+  /// 基准值和计时一起带过来。
+  void _resetTurnUsageSampling() {
+    _closeTurnUsageSampling();
+    // 换 runtime 之后仍是「没有收口的回合」：下一个 tick（可能早于
+    // `message.start`）要能开新一轮的实时读数。
+    _turnUsageSettled = false;
+    _turnUsageSessionId = null;
+    _turnUsageBaselineOutput = null;
+    _turnUsageBaselineTotal = null;
+    _turnUsageMetrics = null;
+    _turnUsageMetricsEpoch = -1;
+    _liveSessionUsage = const <String, dynamic>{};
+  }
+
+  /// 回合收口：停表、清空实时读数并发布空值。
+  ///
+  /// 所有回合结束的路径都必须经过这里（`message.complete` 之后的
+  /// [_completeRun]、roster 收口、失败/取消、runtime 回收），否则页脚会
+  /// 挂着上一轮 `session.usage` tick 留下的读数——例如有 tick 却始终没有
+  /// `message.complete` 的回合。
+  ///
+  /// 收口同时推进回合 epoch：下一次没有 `message.start` 的
+  /// `message.complete` 属于新回合，不能沿用这一轮的采样。
+  void _closeTurnUsageSampling() {
+    final closingEpoch = _turnUsageEpoch;
+    _turnUsageClock
+      ..stop()
+      ..reset();
+    _turnUsageSettled = true;
+    _turnUsageSamplingEpoch = -1;
+    _turnUsageEpoch += 1;
+    // 没有为这个回合结算过的指标属于上一回合：不能挂到这一轮的消息上。
+    if (_turnUsageMetricsEpoch != closingEpoch) {
+      _turnUsageMetrics = null;
+      _turnUsageMetricsEpoch = -1;
+    }
+    _liveTurnTokens = null;
+    _liveTurnTps = null;
+    _publishLiveTurnUsage();
+  }
+
+  void _publishLiveTurnUsage() {
+    if (_disposed) return;
+    final next = LiveTurnUsage(tokens: _liveTurnTokens, tps: _liveTurnTps);
+    if (_liveTurnUsage.value == next) return;
+    _liveTurnUsage.value = next;
+  }
+
+  double? _turnUsageElapsedSeconds() {
+    final watched = _turnUsageSessionId == _desktopRuntimeSessionId
+        ? _turnUsageClock.elapsedMilliseconds / 1000
+        : 0.0;
+    if (watched > 0) return watched;
+    final started = _desktopTurnStartedAt;
+    if (started == null) return null;
+    final seconds = wallNow().difference(started).inMilliseconds / 1000;
+    return seconds > 0 ? seconds : null;
+  }
+
+  static int? _usageTokenValue(Object? value) {
+    if (value is int) return value;
+    if (value is num && value.isFinite) return value.round();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
+  static double? _usageRateValue(Object? value) {
+    if (value is num && value.isFinite) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim());
+    return null;
+  }
+
+  /// 本轮用量 = max(0, 累计值 - 基准值)。唯一实现，tick 与结算共用。
+  ///
+  /// 计数器回退或重置（累计值 < 基准值）视为本轮 0，**不能**把累计值当成
+  /// 本轮用量——否则一次重置就会把整场会话的 tokens 记到这一轮上。
+  static int? _turnUsageDelta(int? total, int? baseline) {
+    if (total == null || total < 0) return null;
+    if (baseline == null || baseline < 0) return total;
+    return total > baseline ? total - baseline : 0;
+  }
+
+  /// `session.usage` 是本轮的累计 tick：只喂给流式读数，
+  /// 绝不写进消息映射（那部分在 `message.complete` 才结算）。实时值只来自
+  /// 服务端，不做本地估算：没有 tick 就没有实时数字。
+  void _applySessionUsageTick(Map<String, dynamic> payload) {
+    final usage = _usagePayloadMap(payload);
+    _liveSessionUsage = Map<String, dynamic>.unmodifiable(usage);
+    if (_turnUsageSettled) return;
+    if (_turnUsageSessionId != _desktopRuntimeSessionId) {
+      _turnUsageSessionId = _desktopRuntimeSessionId;
+    }
+    final output = _turnUsageDelta(
+      _usageTokenValue(usage['output']),
+      _turnUsageBaselineOutput,
+    );
+    if (output != null) {
+      _liveTurnTokens = output;
+    }
+    final rate = _usageRateValue(usage['avg_tps']);
+    if (rate != null && rate > 0) {
+      _liveTurnTps = rate;
+    } else {
+      final seconds = _turnUsageElapsedSeconds();
+      final tokens = _liveTurnTokens;
+      if (seconds != null && seconds > 0 && tokens != null && tokens > 0) {
+        _liveTurnTps = tokens / seconds;
+      }
+    }
+    _publishLiveTurnUsage();
+    _emit(ActiveChatEvent.responseMetrics);
+  }
+
+  /// 用量推送有两种形状：标准 tick 嵌在 `payload['usage']` 里，旧版/简化
+  /// 推送直接放顶层。两种都解包——只读顶层会让标准形状的精确值永远失效。
+  static Map<String, dynamic> _usagePayloadMap(Map<String, dynamic> payload) {
+    final nested = payload['usage'];
+    if (nested is Map) {
+      return <String, dynamic>{
+        for (final entry in nested.entries)
+          if (entry.key is String) entry.key as String: entry.value,
+      };
+    }
+    return Map<String, dynamic>.from(payload);
+  }
+
+  /// 用 `message.complete` 带来的用量结算本轮。
+  ///
+  /// 只认 gateway 的 usage：没有 usage 的回合**不写任何键**，也不再本地估算。
+  /// 只有采样 epoch 与当前回合 epoch 一致的轮才结算；实时读数的清空交给
+  /// [_closeTurnUsageSampling]，回合结束后 footer 只读消息上的精确键。
+  void _settleTurnUsageFromPayload(Map<String, dynamic> payload) {
+    if (_turnUsageSamplingEpoch != _turnUsageEpoch) {
+      // 这一轮没有采样：复用同一 runtime 的次轮常常没有 `message.start`，
+      // 基准值与计时都还是上一回合的。用它们结算只会把旧指标串到新回合，
+      // 所以这里只标记结算、丢掉指标；实时读数由收口统一清空。
+      _turnUsageSettled = true;
+      _turnUsageMetrics = null;
+      _turnUsageMetricsEpoch = -1;
+      return;
+    }
+    _turnUsageSettled = true;
+    _turnUsageClock.stop();
+    final seconds = _turnUsageElapsedSeconds();
+    // 两种形状共用解包：标准形状嵌在 `payload['usage']`，旧形状在顶层。
+    final usage = _usagePayloadMap(payload);
+    final outputNow = _usageTokenValue(usage['output']);
+    final totalNow = _usageTokenValue(usage['total']);
+    _turnUsageMetrics = null;
+    if (outputNow != null || totalNow != null) {
+      final output = _turnUsageDelta(outputNow, _turnUsageBaselineOutput) ?? 0;
+      final total =
+          _turnUsageDelta(totalNow, _turnUsageBaselineTotal) ?? output;
+      final rate =
+          _usageRateValue(usage['avg_tps']) ??
+          (seconds != null && seconds > 0 ? output / seconds : null);
+      _turnUsageMetrics = <String, dynamic>{
+        '_turn_output_tokens': output,
+        '_turn_total_tokens': total,
+        if (seconds != null && seconds > 0) '_turn_seconds': seconds,
+        if (rate != null && rate > 0) '_turn_avg_tps': rate,
+        '_turn_usage_source': 'exact',
+      };
+      _turnUsageMetricsEpoch = _turnUsageEpoch;
+    }
+    // 实时读数的清空与停表由 [_closeTurnUsageSampling] 统一负责：所有结束
+    // 路径都经过那里，包括没有 `message.complete` 的 roster 收口。
+  }
+
+  /// 把本轮指标写进助手消息的行 map。必须在 `done` 之前调用，UI 才能在
+  /// 结束那一帧直接读到精确键（不依赖后续 transcript 对账）。
+  void _attachTurnUsageMetrics() {
+    final metrics = _turnUsageMetrics;
+    if (metrics != null && _messages.isNotEmpty) {
+      final index = _messages.indexWhere(
+        (message) => message['role'] == 'assistant',
+      );
+      if (index >= 0) {
+        final head = _messages[index];
+        if (!metrics.entries.every((entry) => head[entry.key] == entry.value)) {
+          _messages[index] = {...head, ...metrics};
+        }
+      }
+    }
+    // 没有 usage 的回合没有键可写，但仍要发布一次（空值），覆盖 attach 的
+    // 早退路径。
+    _publishLiveTurnUsage();
+  }
 
   /// ps1215: origin of the live turn's elapsed clock. It lives here, not in
   /// the screen, so leaving and reopening a running chat keeps counting from
@@ -10111,6 +10406,9 @@ class ActiveChat {
     // session authority and must survive Stop/runtime retirement.
     _desktopSessionEpoch += 1;
     _sessionInfoEpoch = 0;
+    // 用量采样属于已被替换掉的 runtime：重连或换会话时
+    // 不能把基准值、计时和别的会话缓存下来的指标带过来。
+    _resetTurnUsageSampling();
     _pendingSubagentInterrupts.clear();
     _subagentControlAuthority.clear();
     _subagentPublicEligibleKeys.clear();
@@ -22702,6 +23000,7 @@ class ActiveChat {
       case 'message.start':
         _clearDesktopCompactingIndicator();
         _desktopTurnStartedAt = wallNow();
+        _beginTurnUsageSampling();
         state = ChatPipelineState.waiting;
         _emit(ActiveChatEvent.waiting);
       case 'thinking.delta':
@@ -22810,8 +23109,13 @@ class ActiveChat {
         _handleDesktopApprovalSettled(payload);
       case 'connection.request' || 'connection.update':
         _handleConnectionFrame(event.type, payload);
+      case 'session.usage':
+        _applySessionUsageTick(payload);
       case 'message.complete':
         _clearDesktopCompactingIndicator();
+        // 必须在 `_completeRun` 清掉 `_desktopTurnStartedAt` 之前、
+        // 以及在对账 transcript 之前，先结算 tokens/秒数/速率。
+        _settleTurnUsageFromPayload(payload);
         final completeText = payload['text'] ?? payload['rendered'];
         final narratable =
             completeText is String &&
@@ -27517,6 +27821,9 @@ class ActiveChat {
     _messageLoadEpoch += 1;
     final completingMessageLoadEpoch = _messageLoadEpoch;
     _desktopTurnStartedAt = null;
+    // 回合结束的公共收口：停表、清空实时读数并发布空值。roster 收口与
+    // 没有 usage 的 complete 都走这条路径。
+    _closeTurnUsageSampling();
     _turnSubmittedAtMs = null;
     _activityWatchdogTimer?.cancel();
     _activityWatchdogTimer = null;
@@ -27548,6 +27855,9 @@ class ActiveChat {
       };
     }
     _settlePipelinePlaceholders();
+    // 指标必须在 `done` 之前落到消息 map：UI 在结束那一帧就能读到精确键，
+    // 不用等后续 transcript 对账（对账失败时页脚也不会空着）。
+    _attachTurnUsageMetrics();
     // El terminal del transporte ya confirma que este turno no debe volver a
     // enviarse. Su outbox se cierra antes de esperar la persistencia tardía del
     // transcript; esa espera solo afecta a la proyección visual.
@@ -28379,6 +28689,7 @@ class ActiveChat {
     _messageLoadEpoch += 1;
     _runTerminal = true;
     _desktopTurnStartedAt = null;
+    _resetTurnUsageSampling();
     _turnSubmittedAtMs = null;
     _activityWatchdogTimer?.cancel();
     _activityWatchdogTimer = null;
@@ -29170,6 +29481,7 @@ class ActiveChat {
     _messageLoadEpoch += 1;
     _runTerminal = true;
     _desktopTurnStartedAt = null;
+    _resetTurnUsageSampling();
     _turnSubmittedAtMs = null;
     _activityWatchdogTimer?.cancel();
     _activityWatchdogTimer = null;
@@ -29753,6 +30065,7 @@ class ActiveChat {
     if (clearQueue) _clearQueue();
     _runTerminal = true;
     _desktopTurnStartedAt = null;
+    _closeTurnUsageSampling();
     pendingApproval = null;
     _expireInteractivePromptsForRuntime(_desktopRuntimeSessionId);
     final hasPartial =
@@ -30432,6 +30745,7 @@ class ActiveChat {
     _api.close();
     if (_ownsTranscriptDashboard) _transcriptDashboard?.close();
     _transportStatusListenable.dispose();
+    _liveTurnUsage.dispose();
     _changes.close();
   }
 }

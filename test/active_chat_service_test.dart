@@ -5178,6 +5178,153 @@ void main() {
       expect(history, original);
     });
   });
+
+  group('ActiveChat — uso por ronda (tokens y velocidad)', () {
+    const transcript = <Map<String, dynamic>>[
+      {'role': 'user', 'content': 'hola', 'message_id': 'u1', 'row_id': 10},
+      {
+        'role': 'assistant',
+        'content': 'hola mundo',
+        'message_id': 'a1',
+        'row_id': 11,
+      },
+    ];
+
+    Future<ActiveChat> chatAfterExactTurn(
+      DesktopChatSocket socket, {
+      List<Map<String, dynamic>> messages = transcript,
+    }) async {
+      final chat = _socketChat(socket, messages: messages);
+      final done = chat.changes.firstWhere((e) => e == ActiveChatEvent.done);
+      await chat.send(fullText: 'hola', model: 'm', history: const []);
+      socket.token(1, 'hola mundo');
+      socket.emit('message.complete', {
+        'text': 'hola mundo',
+        'status': 'complete',
+        'usage': {'output': 120, 'total': 900, 'avg_tps': 30.0},
+      });
+      await done.timeout(const Duration(seconds: 5));
+      await _waitFor(() => chat.messages.first['_turn_output_tokens'] != null);
+      return chat;
+    }
+
+    test('la ronda escribe los cinco datos exactos del gateway', () async {
+      final chat = await chatAfterExactTurn(DesktopChatSocket());
+      final head = chat.messages.first;
+      expect(head['_turn_output_tokens'], 120);
+      expect(head['_turn_total_tokens'], 900);
+      expect(head['_turn_avg_tps'], 30.0);
+      expect(head['_turn_usage_source'], 'exact');
+    });
+
+    test('las métricas ya están en la fila cuando llega done', () async {
+      final socket = DesktopChatSocket();
+      final chat = _socketChat(socket, messages: transcript);
+      Map<String, dynamic>? headAtDone;
+      final subscription = chat.changes.listen((event) {
+        if (event == ActiveChatEvent.done && headAtDone == null) {
+          headAtDone = Map<String, dynamic>.from(chat.messages.first);
+        }
+      });
+      addTearDown(subscription.cancel);
+
+      await chat.send(fullText: 'hola', model: 'm', history: const []);
+      socket.token(1, 'hola mundo');
+      socket.emit('message.complete', {
+        'text': 'hola mundo',
+        'status': 'complete',
+        'usage': {'output': 120, 'total': 900, 'avg_tps': 30.0},
+      });
+      await chat.changes
+          .firstWhere((e) => e == ActiveChatEvent.done)
+          .timeout(const Duration(seconds: 5));
+
+      expect(headAtDone, isNotNull);
+      expect(
+        headAtDone!['_turn_output_tokens'],
+        120,
+        reason: 'done tiene que ver ya la fila con las métricas',
+      );
+      expect(headAtDone!['_turn_usage_source'], 'exact');
+    });
+
+    test('una ronda sin usage no escribe métricas (no se estima)', () async {
+      final socket = DesktopChatSocket();
+      final chat = _socketChat(socket, messages: transcript);
+      final done = chat.changes.firstWhere((e) => e == ActiveChatEvent.done);
+      await chat.send(fullText: 'hola', model: 'm', history: const []);
+      socket.token(1, 'hola mundo');
+      // complete 不带 usage：gateway 没给数据，也不凭空编一个。
+      socket.complete(1, 'hola mundo');
+      await done.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final head = chat.messages.first;
+      expect(head.containsKey('_turn_output_tokens'), isFalse);
+      expect(head.containsKey('_turn_total_tokens'), isFalse);
+      expect(head.containsKey('_turn_usage_source'), isFalse);
+      expect(chat.liveTurnTokens, isNull);
+    });
+
+    test(
+      'un contador que retrocede no se cuenta como consumo de la ronda',
+      () async {
+        final socket = DesktopChatSocket();
+        final chat = _socketChat(socket, messages: transcript);
+        final done = chat.changes.firstWhere((e) => e == ActiveChatEvent.done);
+        await chat.send(fullText: 'hola', model: 'm', history: const []);
+        // El runtime ya está ligado; la sesión viene en 100/800, que será la
+        // base del delta al abrirse el turno (message.start).
+        socket.emit('session.info', {
+          'usage': {'output': 100, 'total': 800},
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(chat.desktopRuntimeInfo.usage?.output, 100);
+        socket.token(1, 'hola mundo');
+        // El gateway informa MENOS que la base (contador reseteado).
+        socket.emit('message.complete', {
+          'text': 'hola mundo',
+          'status': 'complete',
+          'usage': {'output': 80, 'total': 700},
+        });
+        await done.timeout(const Duration(seconds: 5));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        final head = chat.messages.first;
+        expect(head['_turn_output_tokens'], 0);
+        expect(head['_turn_total_tokens'], 0);
+        expect(head['_turn_output_tokens'], isNot(80));
+        expect(head['_turn_usage_source'], 'exact');
+      },
+    );
+
+    test(
+      'un tick previo no deja lecturas vivas si el cierre no trae usage',
+      () async {
+        final socket = DesktopChatSocket();
+        final chat = _socketChat(socket, messages: transcript);
+        final done = chat.changes.firstWhere((e) => e == ActiveChatEvent.done);
+        await chat.send(fullText: 'hola', model: 'm', history: const []);
+        socket.emit('session.usage', {
+          'usage': {'output': 50, 'total': 900, 'avg_tps': 20.0},
+        });
+        await _waitFor(() => chat.liveTurnTokens == 50);
+        expect(chat.liveTurnTps, 20.0);
+
+        // Cierre sin usage: no hay nada que escribir y la lectura viva debe
+        // quedar vacía (nunca el número de una ronda sin liquidar).
+        socket.complete(1, 'hola mundo');
+        await done.timeout(const Duration(seconds: 5));
+        await _waitFor(() => chat.liveTurnTokens == null);
+
+        expect(chat.liveTurnTokens, isNull);
+        expect(chat.liveTurnTps, isNull);
+        final head = chat.messages.first;
+        expect(head.containsKey('_turn_output_tokens'), isFalse);
+        expect(head.containsKey('_turn_usage_source'), isFalse);
+      },
+    );
+  });
 }
 
 final class _UnreadableFenceStorage implements CompressionRestoreStorage {

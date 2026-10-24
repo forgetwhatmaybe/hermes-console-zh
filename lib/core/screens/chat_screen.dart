@@ -66,6 +66,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_picker_android/image_picker_android.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
+import 'package:intl/intl.dart' show NumberFormat;
 import 'package:markdown/markdown.dart' as md;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15374,13 +15375,17 @@ class _ChatScreenState extends State<ChatScreen>
                                   _buildActivitySnapshot(),
                                 ),
                                 clock: _chat.wallNow,
-                                child: AgentTaskScope(
-                                  tasks: _chat.transcriptAgentTasks,
-                                  ownerStepId:
-                                      _chat.transcriptAgentTasks.isEmpty
-                                      ? null
-                                      : latestAgentTaskStepId(_messages),
-                                  child: _buildBody(),
+                                child: _LiveTurnUsageScope(
+                                  usage: _chat.liveTurnUsageListenable,
+                                  isLive: () => _chat.isStreaming,
+                                  child: AgentTaskScope(
+                                    tasks: _chat.transcriptAgentTasks,
+                                    ownerStepId:
+                                        _chat.transcriptAgentTasks.isEmpty
+                                        ? null
+                                        : latestAgentTaskStepId(_messages),
+                                    child: _buildBody(),
+                                  ),
                                 ),
                               ),
                               Positioned(
@@ -23241,6 +23246,34 @@ Duration? _assistantActivityDuration(Map<String, dynamic> metadata) {
   return Duration(milliseconds: (raw * 1000).round());
 }
 
+/// 本轮回复流式进行中的用量：输出 tokens 与实时速率。与 `LiveTurnScope`
+/// 同一模式：行组件直接从组件树读取，任何消息包装层都不必层层传递。
+///
+/// 这里不存值的快照：页脚订阅 [usage] 这个窄通道，只重建自己那一小块。
+/// 父级因文本 flush 重建并不能保证每个 token 都到帧上，靠它顺带刷新会让
+/// 数字冻住（Codex P1）。
+class _LiveTurnUsageScope extends InheritedWidget {
+  const _LiveTurnUsageScope({
+    required this.usage,
+    required this.isLive,
+    required super.child,
+  });
+
+  /// service 的实时用量通道；footer 直接用它当重建源与读数源。
+  final ValueListenable<LiveTurnUsage> usage;
+
+  /// 回合是否还在跑。回合结束后一律用结算值（`_turn_*`），实时通道的值
+  /// 即使还在（service 会保留最后一轮）也不能拿来渲染。
+  final bool Function() isLive;
+
+  static _LiveTurnUsageScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_LiveTurnUsageScope>();
+
+  @override
+  bool updateShouldNotify(_LiveTurnUsageScope oldWidget) =>
+      !identical(oldWidget.usage, usage);
+}
+
 /// Bot Chat identity for descendants (assistant message headers): the bot
 /// whose chat this is. Absent in normal chats.
 class _BotChatIdentity extends InheritedWidget {
@@ -23819,6 +23852,9 @@ class _AssistantMessage extends StatelessWidget {
         bottom: showFooter ? (compact ? 1 : 3) : 0,
       ),
       time: showFooter ? timestamp : null,
+      trailing: showFooter
+          ? _turnUsageTrailing(context, metadata, live: isStreaming)
+          : null,
       header: branchable(
         !showHeader
             ? null
@@ -24288,6 +24324,81 @@ String? _formatMessageTimestamp(Map<String, dynamic> metadata) =>
     formatChatMessageTime(
       metadata['created_at'] ?? metadata['timestamp'] ?? metadata['createdAt'],
     );
+
+/// 本轮的 «1,234 tokens · 56 tok/s» 页脚。
+///
+/// 结算后是 `active_chat_service` 写入的 `_turn_*` 键；`live` 时订阅 service
+/// 的窄通知，只重建这段文字，读数取本轮的实时值（服务端 tick，同样精确）。
+/// 没有可显示的 tokens 时返回 `null`（流式中返回空占位）。
+Widget? _turnUsageTrailing(
+  BuildContext context,
+  Map<String, dynamic> metadata, {
+
+  /// 本轮进行中：以流式值为准，绝不与精确值混用。
+  bool live = false,
+}) {
+  if (!live) return _turnUsageText(context, metadata);
+  final scope = _LiveTurnUsageScope.maybeOf(context);
+  if (scope == null) return _turnUsageText(context, metadata);
+  // 只订阅这一小块：父级是否因文本 flush 重建都不影响数字刷新。
+  return ValueListenableBuilder<LiveTurnUsage>(
+    valueListenable: scope.usage,
+    // 回合已经结束就吞掉这次 notify：结算的键还没落到这一行的 map 上时，
+    // 宁可空这一帧，也不要拿实时值当结算值再跳到精确值。
+    builder: (context, usage, _) =>
+        _turnUsageText(
+          context,
+          metadata,
+          liveUsage: scope.isLive() ? usage : null,
+        ) ??
+        const SizedBox.shrink(),
+  );
+}
+
+/// 页脚文字本体；[liveUsage] 非空时用它（本轮实时值），否则读 `_turn_*`。
+Widget? _turnUsageText(
+  BuildContext context,
+  Map<String, dynamic> metadata, {
+  LiveTurnUsage? liveUsage,
+}) {
+  final settledTokens =
+      _turnNumber(metadata['_turn_output_tokens'])?.round() ?? 0;
+  final liveTokens = liveUsage?.tokens ?? 0;
+  // 结算键优先：写键与 notify 之间仍有一帧的窗口，那时这一行拿到的是旧的
+  // map，只能先空着（isLive 已在上面把「回合结束」的 notify 挡掉）。判定看
+  // 标记而不是 tokens 数值，差分为 0 也不会被误当成实时值。
+  final settled =
+      metadata.containsKey('_turn_usage_source') || settledTokens > 0;
+  final tokens = settled ? settledTokens : liveTokens;
+  if (tokens <= 0) return null;
+  final strings = Strings.of(context);
+  final rate = settled
+      ? _turnNumber(metadata['_turn_avg_tps'])
+      : liveUsage?.tps;
+  final parts = [
+    strings.turnTokens(
+      NumberFormat.decimalPattern(strings.localeName).format(tokens),
+    ),
+    if (rate != null && rate > 0) strings.turnRate('${rate.round()}'),
+  ];
+  return Padding(
+    padding: const EdgeInsets.only(top: 3),
+    child: Text(
+      parts.join(' · '),
+      style: TextStyle(
+        fontSize: 10,
+        fontFamily: 'monospace',
+        color: Theme.of(context).hermes.textSecondary,
+      ),
+    ),
+  );
+}
+
+num? _turnNumber(Object? raw) => raw is num
+    ? raw
+    : raw is String
+    ? num.tryParse(raw)
+    : null;
 
 class _LinkPreviewData {
   final String title;

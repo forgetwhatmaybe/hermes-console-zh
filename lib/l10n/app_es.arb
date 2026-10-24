@@ -617,6 +617,22 @@
   "chaContextUsageError": "No se pudo cargar el desglose. El resumen de uso sigue disponible.",
   "chaContextUsageEmpty": "Hermes no devolvió categorías para esta sesión.",
   "chaContextTotal": "Tokens acumulados de la sesión",
+  "turnTokens": "{count} tokens",
+  "@turnTokens": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "turnRate": "{rate} tok/s",
+  "@turnRate": {
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
   "chaContextCategorySystem": "Prompt del sistema",
   "chaContextCategoryTools": "Herramientas",
   "chaContextCategoryRules": "Reglas del proyecto",

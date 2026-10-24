@@ -992,6 +992,12 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen>
   SttEngineKind get _phoneDictationEngine =>
       _isPhoneDictation(_s.sttEngine) ? _s.sttEngine : _lastPhoneDictation;
 
+  /// Elegir «Servidor Hermes» es el consentimiento: el usuario decide, con su
+  /// propio servidor delante, que el audio salga del teléfono. Antes se exigía
+  /// un consentimiento previo que solo un diálogo podía escribir, así que la
+  /// fila se quedaba muda y el dictado seguía en el motor local (sin modelo en
+  /// chino) sin que nada lo dijera. Ningún fallo de aquí revierte a «este
+  /// teléfono» ni se calla: el toque avisa con la respuesta del servidor.
   Future<void> _selectHermesDictation(bool useServer) async {
     if (!useServer) {
       if (_isPhoneDictation(_s.sttEngine)) return;
@@ -999,18 +1005,70 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen>
       return;
     }
     if (_s.sttEngine == SttEngineKind.hermesServer) return;
+    final s = Strings.of(context);
     final identity = _nativeVoiceIdentity;
     final dashboard = _nativeVoiceDashboard;
     final app = context.findAncestorStateOfType<HermesAppState>();
     final preferences = widget.preferences ?? app?.connManager.prefs;
-    if (identity == null || dashboard == null || preferences == null) return;
-    if (_nativeVoiceCapability?.transcribe != true) return;
+    if (identity == null || dashboard == null || preferences == null) {
+      _snack(s.voiceErrorUnavailable);
+      return;
+    }
     await NativeVoiceConsentStore(
       preferences,
     ).write(identity, NativeVoiceConsent.accepted);
     if (!mounted) return;
-    if (_isPhoneDictation(_s.sttEngine)) _lastPhoneDictation = _s.sttEngine;
     setState(() => _nativeVoiceConsent = NativeVoiceConsent.accepted);
+    var transcribeReady = _nativeVoiceCapability?.transcribe == true;
+    var lastStatus = -1;
+    if (!transcribeReady) {
+      // El toque vuelve a preguntar al servidor: un «no» cacheado de una
+      // sesión anterior no puede dejar la elección imposible para siempre.
+      setState(() => _nativeVoiceLoading = true);
+      transcribeReady = await probeHermesTranscription(
+        statusOf: (endpoint) async {
+          try {
+            final code = await dashboard.probeAudioEndpoint(
+              endpoint,
+              profile: _effectiveProfile,
+            );
+            lastStatus = code;
+            return code;
+          } catch (_) {
+            lastStatus = -1;
+            return -1;
+          }
+        },
+      );
+      if (!mounted) return;
+      final previous = _nativeVoiceCapability;
+      final capability = NativeVoiceCapability(
+        transcribe: transcribeReady,
+        speak: previous?.speak ?? false,
+        checkedAtMs: DateTime.now().millisecondsSinceEpoch,
+        // La sonda del dictado no dice nada de `/api/audio/speak`: sin caché
+        // concluyente, la próxima apertura vuelve a preguntar.
+        conclusive: false,
+      );
+      await NativeVoiceCapabilityStore(preferences).write(identity, capability);
+      if (!mounted) return;
+      setState(() {
+        _nativeVoiceCapability = capability;
+        _nativeVoiceLoading = false;
+      });
+    }
+    if (!transcribeReady) {
+      // Nunca en silencio: la fila se puede pulsar y el toque dice qué falla y
+      // con qué respuesta. La elección anterior (el teléfono) no se toca.
+      _snack(
+        '${s.voiceProblemDictationServer} '
+        '(/api/audio/transcribe → '
+        '${lastStatus < 0 ? 'network' : 'HTTP $lastStatus'})',
+      );
+      return;
+    }
+    if (!mounted) return;
+    if (_isPhoneDictation(_s.sttEngine)) _lastPhoneDictation = _s.sttEngine;
     await _selectEngine(stt: SttEngineKind.hermesServer);
   }
 
@@ -2401,7 +2459,8 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen>
             title: s.voiceModeServerTitle,
             value: _serverDictationShort(),
             selected: hermesDictation,
-            enabled: hermesDictation || (!serverDisabled && canTranscribe),
+            // Siempre pulsable: si el servidor no está listo, el toque explica
+            // por qué en vez de dejar la fila gris y muda.
             onTap: () => _selectHermesDictation(true),
           ),
           if (hermesDictation)

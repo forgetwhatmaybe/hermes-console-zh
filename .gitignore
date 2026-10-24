@@ -53,6 +53,8 @@ app.*.map.json
 /android/app/release
 /android/build/
 /android/.gradle/
+# Kotlin 编译会话缓存（Kotlin 2.x 在 android/ 下生成的 sessions 目录，非构建产物）
+/android/.kotlin/
 /release-apks/
 /dist/
 

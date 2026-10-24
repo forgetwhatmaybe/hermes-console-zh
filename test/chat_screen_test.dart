@@ -41911,6 +41911,83 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  testWidgets('uso del turno: en vivo y al cerrar, sin estimación local', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(960, 2142)
+      ..devicePixelRatio = 2.5;
+    addTearDown(tester.view.reset);
+    final gateway = _UiRewindGateway();
+    final chat = await pumpChat(
+      tester,
+      connection: _remoteConn('conn-turn-usage'),
+      desktopGateway: gateway,
+    );
+    expect(
+      await chat.send(
+        fullText: 'Pregunta de uso',
+        model: 'hermes-agent',
+        history: const [],
+      ),
+      isTrue,
+    );
+    gateway.emit('message.start');
+    gateway.emit('message.delta', const {'text': 'Respuesta con uso'});
+    gateway.emit('session.usage', const {
+      'usage': {'output': 1234, 'total': 5000},
+    });
+    for (var frame = 0; frame < 40; frame++) {
+      await tester.pump(const Duration(milliseconds: 33));
+    }
+
+    // (a) 实时：页脚跟随 gateway 的 tick，且已不再带 `~`（tick 的
+    // 值本身就是精确值，客户端不做任何估算）。
+    expect(find.textContaining('1.234 tokens'), findsOneWidget);
+    expect(find.textContaining('~'), findsNothing);
+
+    // 本轮的账由 `message.complete` 结清；tick 只负责喂实时值。
+    gateway.emit('message.complete', const {
+      'text': 'Respuesta con uso',
+      'usage': {'output': 1234, 'total': 5000},
+    });
+    // (b) 结算时同一行保持同一个数字（不跳变、不闪烁）。逐帧检查：
+    // 只要有一帧带 `~`，就是 Codex 指出的那次闪烁。
+    for (var frame = 0; frame < 40; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        find.textContaining('~'),
+        findsNothing,
+        reason: 'frame $frame: el pie volvió a marcar ~ tras cerrar',
+      );
+    }
+    expect(find.textContaining('1.234 tokens'), findsOneWidget);
+
+    // (c) 没有 usage 的一轮不编数字：服务端已不再做本地估算，
+    // 所以页脚根本不出现。
+    final footersBefore = find.textContaining('tok/s').evaluate().length;
+    expect(
+      await chat.send(
+        fullText: 'Pregunta sin uso',
+        model: 'hermes-agent',
+        history: const [],
+      ),
+      isTrue,
+    );
+    gateway.emit('message.start');
+    gateway.emit('message.delta', const {'text': 'Respuesta sin uso'});
+    gateway.emit('message.complete', const {'text': 'Respuesta sin uso'});
+    for (var frame = 0; frame < 40; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(
+      find.textContaining('tok/s').evaluate().length,
+      footersBefore,
+      reason: 'un turno sin usage no debe pintar cifras del turno',
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _TodoResumeGateway extends _StableRefreshGateway {
