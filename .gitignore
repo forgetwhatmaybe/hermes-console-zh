@@ -83,8 +83,15 @@ releases/
 /.serena/
 /.rollback-snapshots/
 /docs/agent-handoffs/
+# 本机交接材料含本机路径与 PID，不入公开库；备份在私有库 hermes-patches/handoffs/
+/docs/HANDOFF-*.md
 
 # Fork local build secrets / working dirs
 *.jks
 *.p12
 .zh/
+
+# 本机调试产物（体积大或无价值，勿入库）
+*.hprof
+test/bots/failures/
+/.workbuddy/

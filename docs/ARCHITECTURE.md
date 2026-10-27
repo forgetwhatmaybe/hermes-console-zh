@@ -68,6 +68,42 @@ package). A flavor is a distribution lane, not a feature switch.
 - Drafts and a cache of recent chats are kept on the device; the authoritative history is
   the server's.
 
+## Recovery and draft ownership
+
+```text
+composer batch -> encrypted outbox -> keyed server admission -> ACK
+       |                                                     |
+       +-> successor draft has its own batch identity <-------+
+
+live socket -> replay hold -> contiguous replay -> normal event dispatch
+                      |
+                      +-> quarantine -> snapshot coverage check
+                                           |
+                         refused cut -> durable viewer read / terminal state
+```
+
+- An ACK or transcript settlement retires only its submitted batch. Recheck
+  text, attachment sources and stored turn identity after awaits;
+  a newer draft must survive in both the composer and encrypted storage.
+- Failed or abandoned replay retains held events on the same wire. A text-only
+  snapshot cannot cover tool/control events. Retiring a wire drops its frames
+  and preserves a bounded loss marker; never replay old-wire events on a new one.
+- Current server snapshots do not supply full recovery-domain evidence. A
+  viewer whose live boundary is refused still uses snapshot text and additive
+  durable reads to reach an authoritative terminal state. An own turn can remain
+  connecting while the server still reports running, then converge through
+  terminal status and durable final text. Unit-level full-proof
+  support alone does not establish production recovery.
+- Recovered events pass through the ordinary dispatcher so request cancellation,
+  approval IDs, request registries and watchdogs have the same semantics.
+- Parse IPv6 literals before local hostnames. Public HTTP/WS destinations are
+  refused before transport; HTTPS/WSS and supported private ranges remain usable.
+
+Validation for this repair is recorded in `specs/082-source-audit-fixes/`.
+Use the mandatory suites in `AGENTS.md`, focused `source_audit_*` tests and
+the `AUD05` widget cases. Phone-side disconnect diagnosis remains separate
+from these tests and from Dashboard health.
+
 ## Principles
 
 - **Fail soft.** A missing server capability shows an honest "not available";

@@ -58,6 +58,17 @@ The main model is **not isolated per profile**: `POST /api/model/set?profile=X`
 changes the model of the running gateway (there is a single gateway). The app
 asks for confirmation first. That is Hermes' semantics, not an app bug.
 
+### Local admission repair: interrupted submit
+
+The paired local server repair may answer `prompt.submit` with JSON-RPC error
+`4095`, `data.reason = "submit_interrupted"` when Stop invalidated its admission
+before worker handoff. The user row may already be durable. The original
+`client_turn_id` remains terminal in that runtime's registry; retrying that key
+must not execute it again. This is not proof of a clean pre-acceptance refusal.
+Console keeps its ambiguous delivery and stable identity for explicit retry or
+reconciliation; it does not switch to an unkeyed legacy submission. Existing
+servers need not emit this error. No request/result/event schema changes.
+
 ## 3. Gateway (retired from the app)
 
 The app no longer calls the Gateway REST API (`/v1/runs`, `/v1/models`,
