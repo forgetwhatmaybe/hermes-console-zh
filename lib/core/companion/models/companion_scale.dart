@@ -1,3 +1,5 @@
+import '../../../l10n/app_localizations.dart';
+
 /// Preset histórico de tamaño de la mascota "Companion" (Fase B / US2).
 ///
 /// Se conserva para migrar preferencias S/M/L y compatibilidad con versiones
@@ -34,15 +36,15 @@ enum CompanionScale {
     }
   }
 
-  /// Etiqueta legible para accesibilidad/semántica.
-  String get label {
+  /// Etiqueta legible para accesibilidad/semántica en el idioma activo.
+  String labelFor(Strings strings) {
     switch (this) {
       case CompanionScale.small:
-        return 'Pequeña';
+        return strings.petSizeSmall;
       case CompanionScale.medium:
-        return 'Mediana';
+        return strings.petSizeMedium;
       case CompanionScale.large:
-        return 'Grande';
+        return strings.petSizeLarge;
     }
   }
 

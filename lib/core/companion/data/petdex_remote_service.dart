@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'companion_error_codes.dart';
+
 /// Una mascota listada en el manifest remoto de Petdex (feature 006 / Petdex
 /// remoto). Solo datos de catálogo; el arte se descarga bajo demanda.
 class PetdexRemotePet {
@@ -34,13 +36,23 @@ class PetdexRemotePet {
 
 /// Error de catálogo/descarga remota de Petdex. La UI lo captura y muestra un
 /// aviso claro; **nunca** debe propagar un crash.
-class PetdexRemoteException implements Exception {
+class PetdexRemoteException implements CompanionCodedError {
+  /// Identificador estable del fallo, o texto libre de un doble de test.
   final String message;
+
+  @override
+  final CompanionErrorCode? code;
 
   /// Petdex no se pudo alcanzar (sin red, DNS, TLS), frente a una respuesta
   /// que llegó pero no sirve.
   final bool offline;
-  PetdexRemoteException(this.message, {this.offline = false});
+  PetdexRemoteException(this.message, {this.offline = false, this.code});
+
+  /// Fallo propio del servicio: el mensaje es el código estable, sin texto de
+  /// interfaz.
+  PetdexRemoteException.coded(CompanionErrorCode code, {bool offline = false})
+    : this(code.name, offline: offline, code: code);
+
   @override
   String toString() => 'PetdexRemoteException: $message';
 }
@@ -92,10 +104,14 @@ class PetdexRemoteService {
       root = jsonDecode(utf8.decode(bytes));
     } catch (e) {
       debugPrint('[petdex] excepción silenciada (se relanza como error propio): $e');
-      throw PetdexRemoteException('el manifest no es JSON válido');
+      throw PetdexRemoteException.coded(
+        CompanionErrorCode.petdexManifestInvalid,
+      );
     }
     if (root is! Map || root['pets'] is! List) {
-      throw PetdexRemoteException('el manifest no tiene el formato esperado');
+      throw PetdexRemoteException.coded(
+        CompanionErrorCode.petdexManifestFormat,
+      );
     }
     final out = <PetdexRemotePet>[];
     for (final raw in (root['pets'] as List)) {
@@ -103,7 +119,9 @@ class PetdexRemoteService {
       if (pet != null) out.add(pet);
     }
     if (out.isEmpty) {
-      throw PetdexRemoteException('el manifest no contiene mascotas válidas');
+      throw PetdexRemoteException.coded(
+        CompanionErrorCode.petdexManifestEmpty,
+      );
     }
     return out;
   }
@@ -139,7 +157,7 @@ class PetdexRemoteService {
   /// para entregárselos a `CompanionImportService.importFromZipBytes`.
   Future<Uint8List> downloadPetZip(PetdexRemotePet pet) async {
     if (!_isAllowed(pet.zipUrl)) {
-      throw PetdexRemoteException('origen del ZIP no permitido');
+      throw PetdexRemoteException.coded(CompanionErrorCode.petdexOrigin);
     }
     return _getCapped(pet.zipUrl, _maxZipBytes, _zipTimeout);
   }
@@ -148,32 +166,37 @@ class PetdexRemoteService {
   /// (lee el stream y aborta si supera [maxBytes]).
   Future<Uint8List> _getCapped(Uri uri, int maxBytes, Duration timeout) async {
     if (!_isAllowed(uri)) {
-      throw PetdexRemoteException('URL no permitida: $uri');
+      throw PetdexRemoteException.coded(CompanionErrorCode.petdexOrigin);
     }
     try {
       final req = http.Request('GET', uri);
       final res = await _client.send(req).timeout(timeout);
       if (res.statusCode != 200) {
-        throw PetdexRemoteException('respuesta HTTP ${res.statusCode}');
+        debugPrint('[petdex] respuesta HTTP ${res.statusCode}');
+        throw PetdexRemoteException.coded(CompanionErrorCode.petdexHttp);
       }
       final declared = res.contentLength;
       if (declared != null && declared > maxBytes) {
-        throw PetdexRemoteException('el recurso supera el tamaño máximo');
+        throw PetdexRemoteException.coded(CompanionErrorCode.petdexTooLarge);
       }
       final builder = BytesBuilder(copy: false);
       await for (final chunk in res.stream.timeout(timeout)) {
         builder.add(chunk);
         if (builder.length > maxBytes) {
-          throw PetdexRemoteException('el recurso supera el tamaño máximo');
+          throw PetdexRemoteException.coded(CompanionErrorCode.petdexTooLarge);
         }
       }
       return builder.takeBytes();
     } on PetdexRemoteException {
       rethrow;
     } on TimeoutException {
-      throw PetdexRemoteException('tiempo de espera agotado');
+      throw PetdexRemoteException.coded(CompanionErrorCode.petdexTimeout);
     } catch (e) {
-      throw PetdexRemoteException('fallo de red: $e', offline: true);
+      debugPrint('[petdex] fallo de red: $e');
+      throw PetdexRemoteException.coded(
+        CompanionErrorCode.petdexNetwork,
+        offline: true,
+      );
     }
   }
 

@@ -174,6 +174,7 @@ import '../theme/app_theme.dart';
 import '../theme/motion.dart';
 import '../../l10n/app_localizations.dart';
 import '../utils/api_error.dart';
+import '../utils/chat_error_localization.dart';
 import '../utils/session_title.dart';
 import '../utils/short_server_path.dart';
 import '../utils/voice_error.dart';
@@ -3896,18 +3897,8 @@ class _ChatScreenState extends State<ChatScreen>
       prepared.fullText,
       allowLegacyContentPair: true,
     );
-    if (prepared.restoresComposer &&
-        _textController.text.trim() == prepared.text.trim()) {
-      _restoringDraft = true;
-      setState(() {
-        _textController.clear();
-        _pendingAttachments.clear();
-      });
-      _restoringDraft = false;
-      await _clearDraft();
-    } else if (mounted) {
-      setState(() {});
-    }
+    await _retireSettledComposerDraft(prepared);
+    if (mounted) setState(() {});
   }
 
   void _showHiddenRecoveredTurn(PreparedTurn prepared) {
@@ -3945,6 +3936,43 @@ class _ChatScreenState extends State<ChatScreen>
       model: prepared.model,
       profile: prepared.profile,
     );
+  }
+
+  /// A transcript settles one batch, not the draft slot. Older recovered
+  /// drafts may have no submitted identity: bind only the exact visible batch
+  /// before retiring it, then recheck ownership after secure-storage awaits.
+  Future<void> _retireSettledComposerDraft(PreparedTurn prepared) async {
+    if (mounted &&
+        prepared.restoresComposer &&
+        !_composerHoldsOtherDraft(prepared) &&
+        (_textController.text.isNotEmpty || _pendingAttachments.isNotEmpty)) {
+      _draftTimer?.cancel();
+      await _saveDraftSnapshot(
+        _textController.text,
+        List<AttachmentDraft>.of(_pendingAttachments),
+        preparedTurnAuthorityCaptured: true,
+        submittedTurnClientTurnId: prepared.clientTurnId,
+      );
+      if (mounted && !_composerHoldsOtherDraft(prepared)) {
+        _restoringDraft = true;
+        setState(() {
+          _textController.clear();
+          _pendingAttachments.clear();
+        });
+        _restoringDraft = false;
+        _syncProducerAttachmentRetention();
+      }
+    }
+    if (mounted && _composerHoldsOtherDraft(prepared)) {
+      // Flush a successor even if its debounce has not fired. This snapshot
+      // carries no ownership from A; later edits keep their own queued save.
+      await _saveDraftSnapshot(
+        _textController.text,
+        List<AttachmentDraft>.of(_pendingAttachments),
+        preparedTurnAuthorityCaptured: true,
+      );
+    }
+    await _clearSubmittedTurnDraft(prepared.clientTurnId);
   }
 
   /// Devuelve el turno recuperado al composer solo si está vacío: un borrador
@@ -6913,7 +6941,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   bool get _canPassivelyRefreshTranscript =>
       _canProbePassiveRemoteActivity &&
-      !_chat.isStreaming &&
+      (!_chat.isStreaming || !_chat.clientOwnsLiveTurn) &&
       (!_chat.hasDesktopRuntime || _chat.remoteSurfaceOwnsLiveTurn) &&
       _messageRefreshInFlightEpoch == null;
 
@@ -6937,9 +6965,11 @@ class _ChatScreenState extends State<ChatScreen>
       _invalidatePassiveMessageRefresh();
       return;
     }
-    // Un turno vivo sigue siendo una transición de autoridad para la lectura
-    // durable: retira la petición REST en vuelo, pero conserva el sondeo.
-    if (_chat.isStreaming) _invalidatePassiveMessageRefresh();
+    // Un turno propio sigue siendo una transición de autoridad para la lectura
+    // durable: retira la petición REST en vuelo, pero conserva el sondeo. Un
+    // turno de visor (otra superficie lo envió) no la interrumpe: la lectura
+    // durable debe converger mientras el turno remoto sigue emitiendo.
+    if (_chat.clientOwnsLiveTurn) _invalidatePassiveMessageRefresh();
     reader?.setVisible(true);
     if (!refreshNow) return;
     if (changedDurableChatId != null) {
@@ -6954,14 +6984,27 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<bool> _refreshPassiveTranscript() async {
     if (!_canProbePassiveRemoteActivity) return true;
+    // A transport recovery edge (see `_onTransportVisibilityChanged`) opens a
+    // generation whose first read must be the full page. The one-row tail
+    // probe compares against the last page THIS client saw, so right after a
+    // gap it cannot tell «the store did not move» from «we were deaf»: it
+    // answers «unchanged» and the rows committed while the socket was down
+    // wait for an unrelated event. The epoch pair survives a failed read and a
+    // read that a newer edge superseded, so the convergence is never lost.
+    final recoveryForced =
+        _chat.transportRecoveryDurableReadEpoch !=
+        _chat.transportRecoveryDurableReadCompletedEpoch;
+    final readEpoch = _chat.transportRecoveryDurableReadEpoch;
     // `sessions.changed` is direct evidence the durable store moved — unlike
     // the roster-derived heuristics below, it does not depend on catching
     // another surface's turn while it is still `busy`. A fast turn on
     // Desktop can complete before this client's next roster poll, leaving
     // `remoteSurfaceOwnsLiveTurn` false even though state.db just changed;
     // without this bypass such a reply would sit unread until an unrelated
-    // event happened to trigger a passive read.
-    final durableChangeConfirmed = _durableTranscriptReadPending;
+    // event happened to trigger a passive read. A recovery edge is the same
+    // kind of evidence.
+    final durableChangeConfirmed =
+        _durableTranscriptReadPending || recoveryForced;
     // Store changes up to this revision were broadcast before this read
     // started, so a read that succeeds has reconciled them.
     final durableRevisionAtStart = _chat.durableSessionsChangeRevision;
@@ -6969,8 +7012,10 @@ class _ChatScreenState extends State<ChatScreen>
     await _chat.refreshPassiveRemoteActivity();
     if (!_canProbePassiveRemoteActivity) return true;
     // El sondeo ya cumplió su parte; el transcript durable no se lee mientras
-    // el turno siga vivo (una lectura así reaparece como burbuja duplicada).
-    if (_chat.isStreaming) return true;
+    // un turno PROPIO siga vivo (una lectura así reaparece como burbuja
+    // duplicada). Un turno de visor (esta superficie no lo envió) sí se lee:
+    // las filas durables de otras superficies convergen debajo de la fila viva.
+    if (_chat.isStreaming && _chat.clientOwnsLiveTurn) return true;
     // N6b: a snapshot recovery owns the transcript reads of this chat until
     // it converges (and for a few seconds after, same generation). The
     // pending-change flag stays set, so the next quiet read still happens.
@@ -6993,24 +7038,44 @@ class _ChatScreenState extends State<ChatScreen>
     // for any session every couple of seconds while an agent works. Read the
     // newest durable row first; when it and the local projection match the
     // last published page, the full page cannot add anything.
-    final probe = await _chat.probePassiveDurableTail();
-    if (!_canProbePassiveRemoteActivity) return true;
-    if (probe != null && probe.unchanged && !_chat.isStreaming) {
-      _durableTranscriptReadPending = false;
-      _markDurableRevisionViewed(durableRevisionAtStart);
-      return true;
+    String? probedTail;
+    if (!recoveryForced) {
+      final probe = await _chat.probePassiveDurableTail();
+      if (!_canProbePassiveRemoteActivity) return true;
+      if (probe != null && probe.unchanged && !_chat.isStreaming) {
+        _durableTranscriptReadPending = false;
+        _markDurableRevisionViewed(durableRevisionAtStart);
+        return true;
+      }
+      probedTail = probe?.tail;
     }
     final fetched = await _fetchMessages(passiveOnly: true);
-    _chat.confirmPassiveDurableTail(fetched ? probe?.tail : null);
-    // Only retire the pending flag on a successful read — a transient
-    // failure (disconnect/network blip) must keep bypassing the runtime-
-    // ownership gate on the reader's own retry, or the signal would be lost
-    // the moment the first attempt fails.
-    if (fetched) {
+    if (recoveryForced) {
+      // No probe vouched for this page, so the load itself is the only record
+      // of the tail (`_recordPublishedDurableTail` keeps it when it
+      // publishes). A failed forced read proves nothing and clears it.
+      if (!fetched) _chat.confirmPassiveDurableTail(null);
+    } else {
+      _chat.confirmPassiveDurableTail(fetched ? probedTail : null);
+    }
+    // Only retire the flags on a successful read — a transient failure
+    // (disconnect/network blip) must keep bypassing the runtime-ownership
+    // gate on the reader's own retry, or the signal would be lost the moment
+    // the first attempt fails. A recovery read whose generation was
+    // superseded while it was in flight (a newer edge) covers an older gap:
+    // it never closes the newest generation, and it must not report success —
+    // the reader's retry then runs the read the newest edge is owed even if
+    // that edge's own request was lost to a hidden reader.
+    final settled =
+        fetched && readEpoch == _chat.transportRecoveryDurableReadEpoch;
+    if (settled) {
+      if (recoveryForced) {
+        _chat.noteTransportRecoveryDurableReadCompleted(readEpoch);
+      }
       _durableTranscriptReadPending = false;
       _markDurableRevisionViewed(durableRevisionAtStart);
     }
-    return fetched;
+    return settled;
   }
 
   /// re1215: record on the chat, which outlives this screen, that the
@@ -8396,6 +8461,17 @@ class _ChatScreenState extends State<ChatScreen>
         kind: HermesNoticeKind.success,
         id: 'chat-transport-reconnected',
       );
+      // The socket is back after a loss the user could see: anything the
+      // durable store gained while it was down was never observed here. Open
+      // a recovery generation and read the FULL page at once — the cheap
+      // one-row tail probe would answer «unchanged» against the last page
+      // this client saw and swallow exactly those rows.
+      _chat.noteTransportRecoveredForDurableRead();
+      _durableTranscriptReadPending = true;
+      _syncPassiveTranscriptRefresh(
+        refreshNow: true,
+        recoveryConverging: true,
+      );
     }
     setState(() {});
   }
@@ -8454,11 +8530,18 @@ class _ChatScreenState extends State<ChatScreen>
     // re1215: the `sessionInfo` that only carries a `sessions.changed` tick
     // goes through the reader's 10 s gap (see notifyDurableStoreChanged):
     // another session writing every 2 s must not poll this chat every 2 s.
+    // A live VIEWER turn is different: the tick carries that turn's own
+    // durable evolution (rows landing while it streams), so it must not be
+    // coalesced behind the gap — the reader's in-flight merging already
+    // collapses bursts.
+    final viewerTurnStreaming =
+        _chat.isStreaming && !_chat.clientOwnsLiveTurn;
     final storeChangeOnly =
         sessionsChangedTick &&
         event == ActiveChatEvent.sessionInfo &&
         !passiveTerminalEvent &&
-        !passiveRuntimeEvent;
+        !passiveRuntimeEvent &&
+        !viewerTurnStreaming;
     _syncPassiveTranscriptRefresh(
       refreshNow:
           !storeChangeOnly &&
@@ -10188,7 +10271,10 @@ class _ChatScreenState extends State<ChatScreen>
       return false;
     }
     // No recargues sobre un stream en curso: clobbearía el parcial que llega.
-    if (_chat.isStreaming) {
+    // Un turno de visor (esta superficie no lo envió) sí se reconcila: la
+    // fila viva se conserva en la proyección y las filas durables de otras
+    // superficies aterrizan debajo (véase `_graftRefreshedTail`).
+    if (_chat.isStreaming && (_chat.clientOwnsLiveTurn || !passiveOnly)) {
       if (!passiveOnly && mounted) {
         HermesNotice.of(context).showSnackBar(
           SnackBar(content: Text(Strings.of(context).chaStatusExecuting)),
@@ -10900,15 +10986,20 @@ class _ChatScreenState extends State<ChatScreen>
     }
 
     // Un turno recuperado tras perder el ACK puede haberse ejecutado ya. Volver
-    // a pulsar Enviar sobre el mismo texto no es una intención nueva y jamás
+    // a pulsar Enviar sobre el mismo lote no es una intención nueva y jamás
     // debe convertirlo en `prepared`, especialmente en transportes sin
-    // idempotencia. Un texto editado sí continúa por la ruta normal con otro ID.
+    // idempotencia. Texto o adjuntos nuevos siguen la ruta normal con otro ID.
     final recoveredAmbiguous = _preparedTurn;
     if (usesComposerState &&
         recoveredAmbiguous != null &&
         recoveredAmbiguous.restoresComposer &&
         recoveredAmbiguous.state == PreparedTurnState.ambiguous &&
-        recoveredAmbiguous.text == text) {
+        recoveredAmbiguous.matchesBatch(
+          text: text,
+          attachments: attachments,
+          model: selectedModel,
+          profile: _effectiveSessionProfile,
+        )) {
       // Solo la evidencia durable decide: sin fila nueva de usuario tras la
       // frontera el turno nunca llegó y se reenvía con el mismo clientTurnId.
       if (!await _settleAmbiguousTurnForRetry(recoveredAmbiguous)) {
@@ -11430,29 +11521,34 @@ class _ChatScreenState extends State<ChatScreen>
     final attachmentsUnchanged =
         mounted && _sameAttachmentDrafts(_pendingAttachments, attachments);
     final canReleaseSubmittedDraft =
-        composerReleasedBeforeAcceptance ||
-        (textOverride == null && composerUnchanged && attachmentsUnchanged);
+        textOverride == null && composerUnchanged && attachmentsUnchanged;
     if (mounted &&
         canReleaseSubmittedDraft &&
         !composerReleasedBeforeAcceptance) {
-      _textController.clear();
+      _draftTimer?.cancel();
+      _restoringDraft = true;
       setState(() {
+        _textController.clear();
         _showScrollToBottom = false;
         _pendingAttachments.clear();
       });
+      _restoringDraft = false;
       // Cierra el teclado al enviar: la respuesta suele ocupar gran parte de la
       // pantalla y el usuario ya no necesita editar el lote aceptado.
       FocusManager.instance.primaryFocus?.unfocus();
     }
-    if (canReleaseSubmittedDraft) {
-      await _clearDraft(actionLifecycle: lifecycle);
-    } else {
-      // El usuario empezó un turno nuevo mientras esperaba el ACK. Ese draft
-      // no pertenece al envío aceptado y nunca debe borrarse junto con él.
-      _scheduleDraftSave();
+    if (mounted &&
+        (_textController.text.isNotEmpty || _pendingAttachments.isNotEmpty)) {
+      // Releasing A before ACK does not own the next draft. Preserve B even
+      // when its debounce has not fired, and never cancel a later edit's save.
+      await _saveDraftSnapshot(
+        _textController.text,
+        List<AttachmentDraft>.of(_pendingAttachments),
+        preparedTurnAuthorityCaptured: true,
+        actionLifecycle: lifecycle,
+      );
     }
-    // Si la pantalla se cerró antes del ACK, `_clearDraft` no puede escribir.
-    // El borrado condicionado solo retira el lote enlazado a este turno.
+    // Also works after route disposal: only A's submitted identity is retired.
     await _clearSubmittedTurnDraft(prepared.clientTurnId);
     _preparedTurn = acceptedTurn;
 
@@ -11845,15 +11941,7 @@ class _ChatScreenState extends State<ChatScreen>
           prepared.fullText,
           allowLegacyContentPair: true,
         );
-        if (mounted && _textController.text.trim() == prepared.text) {
-          _restoringDraft = true;
-          setState(() {
-            _textController.clear();
-            _pendingAttachments.clear();
-          });
-          _restoringDraft = false;
-          await _clearDraft();
-        }
+        await _retireSettledComposerDraft(prepared);
         if (mounted) setState(() => _pipelineState = ChatPipelineState.idle);
         await _chat.reconcileAfterResume();
         return false;
@@ -15827,6 +15915,7 @@ class _ChatScreenState extends State<ChatScreen>
                               _buildStopStatusStrip(colors),
                               _buildBackgroundTaskStrip(colors),
                               _lockWhileEditing(_buildQueueStrip(colors)),
+
                               if (voiceSessionActive)
                                 ConsoleComposerBand(
                                   focusNode: _textFocusNode,
@@ -15859,6 +15948,7 @@ class _ChatScreenState extends State<ChatScreen>
               ),
             ),
             Positioned(
+              key: const ValueKey('floating-header-positioned'),
               top: 0,
               left: 0,
               right: 0,
@@ -19434,7 +19524,10 @@ class _ChatScreenState extends State<ChatScreen>
       final retryChat = _chat;
       final readOnly = _chat.conflictReadOnly || widget.connection.readOnly;
       return ChatErrorBubble(
-        error: activeChatStoredErrorUiMessage(content),
+        error: localizedChatError(
+          activeChatStoredErrorUiMessage(content),
+          Strings.of(context),
+        ),
         onRetry: onRetry,
         prompt: prompt,
         onRestartGateway: _restartGatewayFromChat,
@@ -23366,10 +23459,8 @@ class _AssistantLiveHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _AssistantNameHeader(
-            name: agentName,
-            subtitle: const TurnStatusLine(),
-          ),
+          _AssistantNameHeader(name: agentName),
+          const TurnStatusLine(),
           const LiveTurnTasks(),
         ],
       ),
@@ -23838,6 +23929,25 @@ class _AssistantMessage extends StatelessWidget {
         ),
     ];
 
+    // ct1215: una sola línea de estado por pantalla. El turno vivo la lleva
+    // aquí, bajo su propio texto y sobre el pie de tokens; el resto de las
+    // respuestas conserva su pie tal cual.
+    Widget? trailing;
+    if (isStreaming) {
+      trailing = showFooter
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const TurnStatusLine(),
+                ?_turnUsageTrailing(context, metadata, live: true),
+              ],
+            )
+          : const TurnStatusLine();
+    } else if (showFooter) {
+      trailing = _turnUsageTrailing(context, metadata, live: false);
+    }
+
     // La copia completa vive en la cabecera y la selección parcial en la región
     // exterior. El Markdown permanece como texto normal: ningún párrafo crea un
     // EditableText que pueda mover el scroll al mostrar sus tiradores.
@@ -23852,9 +23962,7 @@ class _AssistantMessage extends StatelessWidget {
         bottom: showFooter ? (compact ? 1 : 3) : 0,
       ),
       time: showFooter ? timestamp : null,
-      trailing: showFooter
-          ? _turnUsageTrailing(context, metadata, live: isStreaming)
-          : null,
+      trailing: trailing,
       header: branchable(
         !showHeader
             ? null
@@ -24362,15 +24470,19 @@ Widget? _turnUsageText(
   LiveTurnUsage? liveUsage,
 }) {
   final settledTokens =
-      _turnNumber(metadata['_turn_output_tokens'])?.round() ?? 0;
-  final liveTokens = liveUsage?.tokens ?? 0;
+      _turnNumber(metadata['_turn_output_tokens'])?.round();
+  // fh1225: 实时通道 null = 本回合还没收到过任何 tick（无占位）；0 = 已有
+  // tick 但增量还是 0（刚开回合 / 计数回退重锚定）——必须显示「0 tokens」，
+  // 否则长工具回合页脚整个消失（本次修的 bug）。
+  final liveTokens = liveUsage?.tokens;
   // 结算键优先：写键与 notify 之间仍有一帧的窗口，那时这一行拿到的是旧的
   // map，只能先空着（isLive 已在上面把「回合结束」的 notify 挡掉）。判定看
   // 标记而不是 tokens 数值，差分为 0 也不会被误当成实时值。
   final settled =
-      metadata.containsKey('_turn_usage_source') || settledTokens > 0;
-  final tokens = settled ? settledTokens : liveTokens;
-  if (tokens <= 0) return null;
+      metadata.containsKey('_turn_usage_source') ||
+      (settledTokens != null && settledTokens > 0);
+  final tokens = settled ? (settledTokens ?? 0) : liveTokens;
+  if (tokens == null || tokens < 0) return null;
   final strings = Strings.of(context);
   final rate = settled
       ? _turnNumber(metadata['_turn_avg_tps'])

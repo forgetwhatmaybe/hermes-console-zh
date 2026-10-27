@@ -21,6 +21,18 @@ class DesktopSessionSnapshot {
   final bool messagesFullyParsed;
   final int? messageCount;
 
+  /// `last_sequence` del `session.resume` (Hermes ≥ 0.21): el watermark del
+  /// flujo de eventos que el contenido de ESTE snapshot ya cubre, sellado bajo
+  /// la misma cerradura que la instantánea (tui_gateway `methods_session.py`
+  /// `_resume_response`). Servidores antiguos no lo envían → null, y entonces
+  /// no existe corte autoritativo snapshot/replay.
+  final int? lastSequence;
+
+  /// `replay_epoch` sellado junto a [lastSequence]. Un epoch distinto del que
+  /// esta conexión observó delata un reinicio/cambio de flujo: su frontera no
+  /// describe los frames retenidos aquí y debe rechazarse.
+  final String? replayEpoch;
+
   /// `session.resume` con `defer_history:true` (Hermes Agent 0.20): el ack es
   /// inmediato, llega con `messages:[]` y el historial se hidrata en segundo
   /// plano (eventos `session.resume_progress`). Servidores antiguos omiten el
@@ -70,6 +82,8 @@ class DesktopSessionSnapshot {
     this.messagesProvided = false,
     this.messagesFullyParsed = true,
     this.messageCount,
+    this.lastSequence,
+    this.replayEpoch,
     this.hydrating = false,
     this.inflight,
     this.queued,
@@ -100,6 +114,8 @@ class DesktopSessionSnapshot {
     messagesProvided: false,
     messagesFullyParsed: messagesFullyParsed,
     messageCount: messageCount,
+    lastSequence: lastSequence,
+    replayEpoch: replayEpoch,
     hydrating: hydrating,
     inflight: inflight,
     queued: queued,
@@ -253,6 +269,10 @@ class DesktopSessionSnapshot {
       messagesProvided: rawMessages is List && json['messages_omitted'] != true,
       messagesFullyParsed: messagesFullyParsed,
       messageCount: _nonNegativeInt(json['message_count']),
+      // Frontera snapshot/replay (Task 4 del gateway). Defensivo: ausente, no
+      // numérico, no entero o ≤ 0 ⇒ null (sin corte autoritativo).
+      lastSequence: _positiveInt(json['last_sequence']),
+      replayEpoch: _exactNonEmptyIdentity(json['replay_epoch']),
       hydrating: json['hydrating'] == true,
       inflight: DesktopInflightTurn.tryParse(json['inflight']),
       queued: DesktopQueuedTurn.tryParse(json['queued']),
@@ -436,6 +456,13 @@ class DesktopInflightTurn {
   final String? status;
   final bool? recoverable;
 
+  /// `display_kind`/`display_metadata` del turno en vuelo
+  /// (tui_gateway `_inflight_snapshot`). Un snapshot que sustituye la fila viva
+  /// debe reproyectarlos, no solo el texto: si no, la tarjeta pierde su forma
+  /// (p. ej. `model_switch`, `compression_result`) al aplicarlo.
+  final String? displayKind;
+  final Map<String, dynamic>? displayMetadata;
+
   /// Structured failure descriptor of a retained failed turn
   /// (agent/error_surface.py): only its short scalar fields are kept.
   final Map<String, Object> errorSurface;
@@ -452,6 +479,8 @@ class DesktopInflightTurn {
     this.error,
     this.status,
     this.recoverable,
+    this.displayKind,
+    this.displayMetadata,
     this.errorSurface = const {},
     List<DesktopInflightCorrection> corrections = const [],
     List<int?> correctionOffsets = const [],
@@ -505,6 +534,10 @@ class DesktopInflightTurn {
       error: error,
       status: status,
       recoverable: recoverable,
+      displayKind: _nonEmptyString(json['display_kind']),
+      displayMetadata: _stringKeyedMap(json['display_metadata']) == null
+          ? null
+          : _freezeMap(_stringKeyedMap(json['display_metadata'])!),
       errorSurface: _errorSurfaceScalars(json['error_surface']),
       corrections: corrections,
       correctionOffsets: correctionOffsets,
@@ -1107,6 +1140,8 @@ const _snapshotParsedKeys = <String>{
   'messages',
   'messages_omitted',
   'message_count',
+  'last_sequence',
+  'replay_epoch',
   'hydrating',
   'inflight',
   'queued',
@@ -1160,6 +1195,8 @@ const _artifactContainerKeys = <String>{
 
 const _inflightParsedKeys = <String>{
   'assistant',
+  'display_kind',
+  'display_metadata',
   'corrections',
   'error',
   'error_surface',

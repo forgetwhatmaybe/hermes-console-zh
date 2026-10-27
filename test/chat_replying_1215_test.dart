@@ -283,7 +283,9 @@ void main() {
   }
 
   // ct1215: the live turn tells itself in the transcript. The lone
-  // «●●● está respondiendo…» row became the turn's status line.
+  // «●●● está respondiendo…» row became the turn's status line, which now
+  // lives between the assistant body and the token footer (the composer dock
+  // was removed so the line is not duplicated).
   Finder statusLine() => find.byKey(const ValueKey('turn-status-line'));
 
   /// What the status line says, timer included.

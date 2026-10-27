@@ -78,15 +78,40 @@ class TransportPrivacy {
   static bool _isPrivateHost(String host) {
     final h = host.toLowerCase();
     if (h.isEmpty) return false;
+    // Classify literals before local DNS names: every IPv6 address contains
+    // colons and most have no dots, including public Internet addresses.
+    if (h.contains(':')) {
+      final literal = h.startsWith('[') && h.endsWith(']')
+          ? h.substring(1, h.length - 1)
+          : h;
+      final List<int> bytes;
+      try {
+        bytes = Uri.parseIPv6Address(literal);
+      } on FormatException {
+        return false;
+      }
+      if (bytes.take(10).every((byte) => byte == 0) &&
+          bytes[10] == 0xff &&
+          bytes[11] == 0xff) {
+        return _isPrivateIpv4(bytes.sublist(12));
+      }
+      if (bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1) {
+        return true; // loopback ::1/128
+      }
+      if ((bytes[0] & 0xfe) == 0xfc) return true; // unique-local fc00::/7
+      return bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80; // fe80::/10
+    }
+    final octets = _ipv4Octets(h);
+    if (octets != null) return _isPrivateIpv4(octets);
     if (h == 'localhost' || h.endsWith('.local')) return true;
     if (h.endsWith('.ts.net')) return true;
     if (!h.contains('.') || h.endsWith('.test') || h.endsWith('.example')) {
       return true;
     }
-    if (h == '::1') return true;
+    return false;
+  }
 
-    final octets = _ipv4Octets(h);
-    if (octets == null) return false;
+  static bool _isPrivateIpv4(List<int> octets) {
     final a = octets[0];
     final b = octets[1];
     if (a == 127) return true; // loopback 127.0.0.0/8

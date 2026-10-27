@@ -8,15 +8,24 @@ import 'package:archive/archive.dart';
 import '../../models/profile_pet.dart';
 import '../models/companion.dart';
 import '../models/companion_animation_state.dart';
+import 'companion_error_codes.dart';
 import 'companion_manifest_parser.dart';
 
 /// Error de importación de una mascota custom local.
-class CompanionImportException implements Exception {
-  final String message;
-  CompanionImportException(this.message);
+///
+/// Lleva un [CompanionErrorCode] estable, nunca texto de interfaz: la pantalla
+/// lo traduce con `localizedCompanionError`.
+class CompanionImportException implements CompanionCodedError {
+  @override
+  final CompanionErrorCode code;
+
+  CompanionImportException(this.code);
+
+  /// Identificador estable del fallo (el `name` del código).
+  String get message => code.name;
 
   @override
-  String toString() => 'CompanionImportException: $message';
+  String toString() => 'CompanionImportException: ${code.name}';
 }
 
 /// Importa una mascota custom **local** desde un ZIP (`pet.json` +
@@ -64,51 +73,37 @@ class CompanionImportService {
     required Directory storageRoot,
   }) async {
     if (!info.hasPet || info.spritesheetRevision.isEmpty) {
-      throw CompanionImportException(
-        'la mascota remota no tiene identidad revisionada',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteIdentity);
     }
     final encoded = info.spritesheetBase64;
     if (encoded == null ||
         encoded.isEmpty ||
         encoded.length > _maxRemoteBase64Chars) {
-      throw CompanionImportException(
-        'el spritesheet remoto está ausente o supera el límite',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteAtlasMissing);
     }
     if (encoded.startsWith('data:')) {
-      throw CompanionImportException(
-        'el spritesheet remoto debe usar base64 sin prefijo',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteAtlasDataUri);
     }
 
     final Uint8List spriteBytes;
     try {
       spriteBytes = base64Decode(encoded);
     } on FormatException {
-      throw CompanionImportException(
-        'el spritesheet remoto no es base64 válido',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteAtlasNotBase64);
     }
     if (spriteBytes.isEmpty || spriteBytes.length > maxSpritesheetBytes) {
-      throw CompanionImportException(
-        'el spritesheet remoto supera el tamaño máximo',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteAtlasTooLarge);
     }
 
     final isPng = _isPng(spriteBytes);
     final isWebp = _isWebp(spriteBytes);
     if (!isPng && !isWebp) {
-      throw CompanionImportException(
-        'el spritesheet remoto no es un PNG/WebP válido',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteAtlasFormat);
     }
     final detectedMime = isPng ? 'image/png' : 'image/webp';
     final declaredMime = info.mime.trim().toLowerCase();
     if (declaredMime.isNotEmpty && declaredMime != detectedMime) {
-      throw CompanionImportException(
-        'el MIME remoto no coincide con sus magic bytes',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteMimeMismatch);
     }
 
     final frameW = info.frameW;
@@ -117,9 +112,7 @@ class CompanionImportService {
         frameH == null ||
         frameW > _maxFrameDimension ||
         frameH > _maxFrameDimension) {
-      throw CompanionImportException(
-        'la geometría de frame remota es inválida',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteFrameGeometry);
     }
 
     final decodedDimensions = await _decodedImageDimensions(spriteBytes);
@@ -127,7 +120,7 @@ class CompanionImportService {
     if (decodedDimensions == null ||
         headerDimensions == null ||
         decodedDimensions != headerDimensions) {
-      throw CompanionImportException('no se pudo validar el atlas remoto');
+      throw CompanionImportException(CompanionErrorCode.remoteAtlasUnreadable);
     }
     final (width, height) = decodedDimensions;
     if (width > _maxAtlasDimension ||
@@ -135,30 +128,22 @@ class CompanionImportService {
         width * height > _maxAtlasDimension * _maxAtlasDimension ||
         width % frameW != 0 ||
         height % frameH != 0) {
-      throw CompanionImportException(
-        'las dimensiones del atlas remoto son inválidas',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteAtlasDimensions);
     }
     final cols = width ~/ frameW;
     final rows = height ~/ frameH;
     if (cols < 1 || rows < 1 || cols > _maxGridAxis || rows > _maxGridAxis) {
-      throw CompanionImportException(
-        'la rejilla del atlas remoto está fuera de límites',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteAtlasGrid);
     }
 
     final rowNames = info.stateRows;
     if (rowNames.length != rows || rowNames.length > _maxGridAxis) {
-      throw CompanionImportException(
-        'la taxonomía de filas remota no coincide con el atlas',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteRowTaxonomy);
     }
     final seenRows = <String>{};
     for (final row in rowNames) {
       if (row.length > 64 || !seenRows.add(row)) {
-        throw CompanionImportException(
-          'la taxonomía de filas remota es inválida',
-        );
+        throw CompanionImportException(CompanionErrorCode.remoteRowTaxonomyInvalid);
       }
     }
 
@@ -191,9 +176,7 @@ class CompanionImportService {
       if (row < 0) continue;
       final count = countFor(entry.key.name, row, rowNames[row]);
       if (count == null) {
-        throw CompanionImportException(
-          'conteo de frames remoto fuera de rango',
-        );
+        throw CompanionImportException(CompanionErrorCode.remoteFrameCount);
       }
       usedRows.add(row);
       states[entry.key.name] = {
@@ -203,7 +186,7 @@ class CompanionImportService {
       };
     }
     if (!states.containsKey(CompanionAnimationState.idle.name)) {
-      throw CompanionImportException('la mascota remota no define idle');
+      throw CompanionImportException(CompanionErrorCode.remoteNoIdle);
     }
 
     final extraRows = <Map<String, dynamic>>[];
@@ -298,12 +281,10 @@ class CompanionImportService {
     String? authorOverride,
   }) async {
     if (zipBytes.isEmpty) {
-      throw CompanionImportException('el archivo está vacío');
+      throw CompanionImportException(CompanionErrorCode.zipEmpty);
     }
     if (zipBytes.length > maxZipBytes) {
-      throw CompanionImportException(
-        'el ZIP supera el tamaño máximo permitido',
-      );
+      throw CompanionImportException(CompanionErrorCode.zipTooLarge);
     }
 
     final Archive archive;
@@ -313,7 +294,7 @@ class CompanionImportService {
       debugPrint(
         '[companion-import] excepción silenciada (se relanza como error propio): $e',
       );
-      throw CompanionImportException('no es un ZIP válido');
+      throw CompanionImportException(CompanionErrorCode.zipInvalid);
     }
 
     // 1) Localiza pet.json (top-level) y rechaza rutas peligrosas.
@@ -323,19 +304,19 @@ class CompanionImportService {
       if (!entry.isFile) continue;
       final name = entry.name;
       if (name.contains('..') || name.startsWith('/') || name.contains('\\')) {
-        throw CompanionImportException('ruta no permitida en el ZIP: "$name"');
+        throw CompanionImportException(CompanionErrorCode.zipUnsafePath);
       }
       final base = name.split('/').last;
       if (base == 'pet.json') manifestEntry = entry;
       byBasename.putIfAbsent(base, () => entry);
     }
     if (manifestEntry == null) {
-      throw CompanionImportException('el ZIP no contiene "pet.json"');
+      throw CompanionImportException(CompanionErrorCode.zipNoManifest);
     }
 
     final manifestBytes = manifestEntry.content as List<int>;
     if (manifestBytes.length > maxManifestBytes) {
-      throw CompanionImportException('"pet.json" es demasiado grande');
+      throw CompanionImportException(CompanionErrorCode.manifestTooLarge);
     }
     final String jsonString;
     try {
@@ -344,7 +325,7 @@ class CompanionImportService {
       debugPrint(
         '[companion-import] excepción silenciada (se relanza como error propio): $e',
       );
-      throw CompanionImportException('"pet.json" no es UTF-8 válido');
+      throw CompanionImportException(CompanionErrorCode.manifestEncoding);
     }
 
     // 2) Decodifica el manifest.
@@ -352,11 +333,11 @@ class CompanionImportService {
     try {
       final decoded = json.decode(jsonString);
       if (decoded is! Map<String, dynamic>) {
-        throw CompanionImportException('"pet.json": la raíz no es un objeto');
+        throw CompanionImportException(CompanionErrorCode.manifestRootNotObject);
       }
       rawMap = decoded;
     } on FormatException {
-      throw CompanionImportException('"pet.json" no es JSON válido');
+      throw CompanionImportException(CompanionErrorCode.manifestInvalidJson);
     }
 
     // Nombre del spritesheet: Fase A usa "spritesheet"; Petdex usa
@@ -369,11 +350,11 @@ class CompanionImportService {
         spriteName.contains('/') ||
         spriteName.contains('\\') ||
         spriteName.contains('..')) {
-      throw CompanionImportException('nombre de spritesheet inválido');
+      throw CompanionImportException(CompanionErrorCode.spriteNameInvalid);
     }
     final lower = spriteName.toLowerCase();
     if (!lower.endsWith('.webp') && !lower.endsWith('.png')) {
-      throw CompanionImportException('el spritesheet debe ser .webp o .png');
+      throw CompanionImportException(CompanionErrorCode.spriteExtensionInvalid);
     }
 
     // 3) Localiza el fichero de spritesheet y valídalo. Algunos pet.json de
@@ -403,19 +384,17 @@ class CompanionImportService {
       }
     }
     if (spriteEntry == null) {
-      throw CompanionImportException(
-        'el ZIP no contiene ningún spritesheet (.webp/.png)',
-      );
+      throw CompanionImportException(CompanionErrorCode.zipNoSpritesheet);
     }
     final spriteBytes = Uint8List.fromList(spriteEntry.content as List<int>);
     if (spriteBytes.isEmpty) {
-      throw CompanionImportException('el spritesheet está vacío');
+      throw CompanionImportException(CompanionErrorCode.spriteEmpty);
     }
     if (spriteBytes.length > maxSpritesheetBytes) {
-      throw CompanionImportException('el spritesheet supera el tamaño máximo');
+      throw CompanionImportException(CompanionErrorCode.spriteTooLarge);
     }
     if (!_isWebp(spriteBytes) && !_isPng(spriteBytes)) {
-      throw CompanionImportException('el spritesheet no es un WebP/PNG válido');
+      throw CompanionImportException(CompanionErrorCode.spriteNotImage);
     }
 
     // 4) Normaliza al schema completo de Fase A. Si el pet.json ya trae "grid"
@@ -439,10 +418,10 @@ class CompanionImportService {
 
     final slug = (manifest['slug'] as String?)?.trim() ?? '';
     if (slug.isEmpty || slug.length > 64 || !_slugPattern.hasMatch(slug)) {
-      throw CompanionImportException('slug inválido o no permitido');
+      throw CompanionImportException(CompanionErrorCode.slugInvalid);
     }
     if (protectedSlugs.contains(slug)) {
-      throw CompanionImportException('una mascota base ya usa el slug "$slug"');
+      throw CompanionImportException(CompanionErrorCode.slugReserved);
     }
 
     final effectiveJson = json.encode(manifest);
@@ -478,31 +457,31 @@ class CompanionImportService {
         spriteName.contains('/') ||
         spriteName.contains('\\') ||
         spriteName.contains('..')) {
-      throw CompanionImportException('nombre de spritesheet inválido');
+      throw CompanionImportException(CompanionErrorCode.spriteNameInvalid);
     }
     final lower = spriteName.toLowerCase();
     if (!lower.endsWith('.webp') && !lower.endsWith('.png')) {
-      throw CompanionImportException('el spritesheet debe ser .webp o .png');
+      throw CompanionImportException(CompanionErrorCode.spriteExtensionInvalid);
     }
     if (spriteBytes.isEmpty) {
-      throw CompanionImportException('el spritesheet está vacío');
+      throw CompanionImportException(CompanionErrorCode.spriteEmpty);
     }
     if (spriteBytes.length > maxSpritesheetBytes) {
-      throw CompanionImportException('el spritesheet supera el tamaño máximo');
+      throw CompanionImportException(CompanionErrorCode.spriteTooLarge);
     }
     if (!_isWebp(spriteBytes) && !_isPng(spriteBytes)) {
-      throw CompanionImportException('el spritesheet no es un WebP/PNG válido');
+      throw CompanionImportException(CompanionErrorCode.spriteNotImage);
     }
 
     final Map<String, dynamic> map;
     try {
       final decoded = json.decode(manifestJson);
       if (decoded is! Map<String, dynamic>) {
-        throw CompanionImportException('"pet.json": la raíz no es un objeto');
+        throw CompanionImportException(CompanionErrorCode.manifestRootNotObject);
       }
       map = decoded;
     } on FormatException {
-      throw CompanionImportException('"pet.json" no es JSON válido');
+      throw CompanionImportException(CompanionErrorCode.manifestInvalidJson);
     }
     // Fuerza coherencia: el spritesheet y el origen los fija el servicio.
     map['spritesheet'] = spriteName;
@@ -510,10 +489,10 @@ class CompanionImportService {
 
     final slug = (map['slug'] as String?)?.trim() ?? '';
     if (slug.isEmpty || slug.length > 64 || !_slugPattern.hasMatch(slug)) {
-      throw CompanionImportException('slug inválido o no permitido');
+      throw CompanionImportException(CompanionErrorCode.slugInvalid);
     }
     if (protectedSlugs.contains(slug)) {
-      throw CompanionImportException('una mascota base ya usa el slug "$slug"');
+      throw CompanionImportException(CompanionErrorCode.slugReserved);
     }
 
     return _writeAtomic(
@@ -561,10 +540,10 @@ class CompanionImportService {
           origin: origin,
         );
       } on CompanionManifestException catch (e) {
-        throw CompanionImportException(e.message);
+        throw CompanionImportException(e.code);
       }
       if (!parsed.isValid) {
-        throw CompanionImportException('la mascota no define "idle"');
+        throw CompanionImportException(CompanionErrorCode.packNoIdle);
       }
 
       if (await target.exists()) {
@@ -602,7 +581,8 @@ class CompanionImportService {
         await backup.rename(target.path);
       }
       if (e is CompanionImportException) rethrow;
-      throw CompanionImportException('fallo al escribir la mascota: $e');
+      debugPrint('[companion-import] fallo al escribir la mascota: $e');
+      throw CompanionImportException(CompanionErrorCode.packWrite);
     }
   }
 
@@ -626,29 +606,22 @@ class CompanionImportService {
             as String?;
     final slug = _sanitizeSlug(rawId ?? '');
     if (slug.isEmpty) {
-      throw CompanionImportException(
-        'el pet.json no es un formato reconocido (sin grid/states ni id válido)',
-      );
+      throw CompanionImportException(CompanionErrorCode.petdexManifestUnrecognized);
     }
     final name = ((raw['displayName'] ?? raw['name']) as String?)?.trim();
 
     final dims = _imageDimensions(spriteBytes);
     if (dims == null) {
-      throw CompanionImportException(
-        'no se pudieron leer las dimensiones del spritesheet',
-      );
+      throw CompanionImportException(CompanionErrorCode.spriteDimensionsUnreadable);
     }
     final (width, height) = dims;
     if (width % _petdexFrameW != 0 || height % _petdexFrameH != 0) {
-      throw CompanionImportException(
-        'spritesheet con dimensiones inesperadas (${width}x$height); '
-        'se espera múltiplo de ${_petdexFrameW}x$_petdexFrameH',
-      );
+      throw CompanionImportException(CompanionErrorCode.spriteDimensionsUnexpected);
     }
     final cols = width ~/ _petdexFrameW;
     final rows = height ~/ _petdexFrameH;
     if (cols < 1 || rows < 1) {
-      throw CompanionImportException('rejilla de spritesheet inválida');
+      throw CompanionImportException(CompanionErrorCode.spriteGridInvalid);
     }
 
     // Detecta los frames REALES de cada fila (última columna no-transparente

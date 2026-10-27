@@ -1,3 +1,5 @@
+import '../data/companion_error_codes.dart';
+
 /// Moderación mínima del prompt de "Hatch" (cosmético).
 ///
 /// No pretende ser un filtro completo: bloquea términos manifiestamente
@@ -21,16 +23,15 @@ class PromptSafety {
   String sanitize(String raw) {
     final trimmed = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (trimmed.isEmpty) {
-      throw PromptRejectedException('Escribe una descripción para tu mascota.');
+      throw PromptRejectedException(CompanionErrorCode.promptEmpty);
     }
     if (trimmed.length > maxLength) {
-      throw PromptRejectedException('La descripción es demasiado larga.');
+      throw PromptRejectedException(CompanionErrorCode.promptTooLong);
     }
     final lower = trimmed.toLowerCase();
     for (final term in _blocked) {
       if (lower.contains(term)) {
-        throw PromptRejectedException(
-            'Esa descripción no está permitida. Prueba con algo cosmético.');
+        throw PromptRejectedException(CompanionErrorCode.promptNotAllowed);
       }
     }
     return trimmed;
@@ -48,10 +49,15 @@ class PromptSafety {
 }
 
 /// El prompt fue rechazado por la moderación mínima.
-class PromptRejectedException implements Exception {
-  final String message;
-  PromptRejectedException(this.message);
+class PromptRejectedException implements CompanionCodedError {
+  @override
+  final CompanionErrorCode code;
+
+  PromptRejectedException(this.code);
+
+  /// Identificador estable del fallo (el `name` del código).
+  String get message => code.name;
 
   @override
-  String toString() => 'PromptRejectedException: $message';
+  String toString() => 'PromptRejectedException: ${code.name}';
 }

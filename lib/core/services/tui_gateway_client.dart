@@ -590,6 +590,38 @@ abstract class HermesDesktopTypedRecoveryGateway {
   bool recoveryAuthorityStillCurrent(RecoveryProof proof);
 }
 
+/// Truncated-replay repair introduced by Task 3.
+///
+/// The socket tells its owner chats that a runtime's replay batch could not be
+/// proven (ring truncated / other epoch / gap) and the chat may read an
+/// authoritative `session.resume` snapshot instead. The boundary adoption is
+/// deliberately separate from the typed recovery proof: a viewer never mints
+/// authority, it only re-orders frames around a cut it has already applied.
+abstract class HermesDesktopReplaySnapshotGateway {
+  /// Epoch this transport reads its replay stream on. A snapshot application
+  /// re-checks it: a reconnect that rotated the epoch (or a legacy transport
+  /// that never announced one) makes a captured boundary describe another
+  /// stream.
+  String get currentReplayEpoch;
+
+  void addTruncatedReplayListener(
+    void Function(String runtimeSessionId, String replayEpoch) listener,
+  );
+
+  void removeTruncatedReplayListener(
+    void Function(String runtimeSessionId, String replayEpoch) listener,
+  );
+
+  /// Lifts [runtimeSessionId]'s quarantine from [baseline] (the snapshot's own
+  /// `last_sequence`) and re-emits the held frames `> baseline` in order.
+  /// Fails closed when this transport is no longer on [replayEpoch].
+  bool adoptViewerSnapshotBoundary({
+    required String runtimeSessionId,
+    required int baseline,
+    required String replayEpoch,
+  });
+}
+
 /// Atomic first-submit creation with the 0.19 session-scoped configuration.
 ///
 /// This remains a separate optional interface so older gateway fakes and
@@ -1343,6 +1375,11 @@ abstract class HermesDesktopIdempotentGateway {
     String clientTurnId,
   );
 
+  /// Live capability probe: asks the connected gateway whether it enforces
+  /// client-turn idempotency (`gateway.capabilities` → `turn_idempotency`).
+  /// Missing on older gateways/fakes — the caller keeps its cached answer.
+  Future<bool> supportsTurnIdempotency() async => false;
+
   Future<DesktopTurnStatus> getTurnStatus(
     String sessionId,
     String clientTurnId,
@@ -1544,7 +1581,8 @@ class TuiGatewayClient
         HermesMcpProvisioningGateway,
         HermesWebhookManagementGateway,
         HermesServerPlatformCapabilitiesGateway,
-        HermesDesktopExclusiveSubmitCapabilityGateway {
+        HermesDesktopExclusiveSubmitCapabilityGateway,
+        HermesDesktopReplaySnapshotGateway {
   static const _transportTeardownBudget = Duration(seconds: 1);
 
   /// Silence tolerated before a socket is declared half-open. Same 45 s as
@@ -1809,7 +1847,14 @@ class TuiGatewayClient
   static const int _maxConcurrentReplayRequests = 4;
   String? _replayEpoch;
 
+  /// Owns the "this runtime could not be proven, read a snapshot" signal.
+  /// The socket keeps the quarantine; listeners only learn about it.
+  final Set<void Function(String runtimeSessionId, String replayEpoch)>
+      _truncatedReplayListeners =
+      <void Function(String runtimeSessionId, String replayEpoch)>{};
+
   /// Current replay authority domain; rotates with every socket generation.
+  @override
   String get currentReplayEpoch => _replayEpoch ?? 'legacy:$_socketGeneration';
   bool _connectionReplayCapable = false;
   bool _connectionChangeEvents = false;
@@ -2106,6 +2151,7 @@ class TuiGatewayClient
   }
 
   Future<void> _connectOnceUnmetered() async {
+    TransportPrivacy.requireAllowed(_connection.effectiveDashboardUrl);
     final generation = ++_socketGeneration;
     _parked = false;
     _stopHeartbeat();
@@ -2745,6 +2791,30 @@ class TuiGatewayClient
     }
   }
 
+  @override
+  void addTruncatedReplayListener(
+    void Function(String runtimeSessionId, String replayEpoch) listener,
+  ) {
+    _truncatedReplayListeners.add(listener);
+  }
+
+  @override
+  void removeTruncatedReplayListener(
+    void Function(String runtimeSessionId, String replayEpoch) listener,
+  ) {
+    _truncatedReplayListeners.remove(listener);
+  }
+
+  /// A listener must never break the replay worker that feeds the rest of the
+  /// runtimes, so every failure is swallowed here.
+  void _notifyTruncatedReplay(String runtimeSessionId, String replayEpoch) {
+    for (final listener in _truncatedReplayListeners.toList(growable: false)) {
+      try {
+        listener(runtimeSessionId, replayEpoch);
+      } catch (_) {}
+    }
+  }
+
   Future<void> _fetchReplay() async {
     final channel = _channel;
     final epoch = _replayEpoch;
@@ -2800,6 +2870,10 @@ class TuiGatewayClient
               for (final replayed in [...decision.replay, ...decision.held]) {
                 _dispatchSessionEvent(replayed, generation, channel);
               }
+            } else {
+              // Truncated batch, other epoch or a gap: the quarantine stands,
+              // so this runtime is a snapshot candidate for its viewer.
+              _notifyTruncatedReplay(entry.key, epoch);
             }
           } catch (_) {
             _replayCoordinator.abandonTransaction(entry.key);
@@ -5644,6 +5718,17 @@ class TuiGatewayClient
     if (channel == null) {
       throw StateError('recovery channel is not current');
     }
+    // The cut is only trusted when the snapshot was sealed on this transport's
+    // own epoch: a foreign or missing epoch, or a non-positive sequence, falls
+    // back to the cut-less behaviour instead of guessing a boundary.
+    final replayEpoch = _replayEpoch;
+    final snapshotSequence = snapshot.lastSequence;
+    final boundary = replayEpoch != null &&
+            snapshot.replayEpoch == replayEpoch &&
+            snapshotSequence != null &&
+            snapshotSequence > 0
+        ? snapshotSequence
+        : null;
     return _replayCoordinator.mintRecoveryProof(
       connectionId: _connection.id,
       durableSessionId: snapshot.storedSessionId,
@@ -5658,10 +5743,10 @@ class TuiGatewayClient
       created: snapshot.created,
       durableIdentityExplicit: snapshot.storedSessionIdentityExplicit,
       identityAliasesConsistent: snapshot.identityAliasesConsistent,
-      // Current upstream exposes neither cross-domain recovery coverage nor an
-      // authoritative snapshot/replay cut. Caller assertions cannot mint either.
+      // Current upstream exposes no cross-domain recovery coverage; only a
+      // snapshot sealed on the current epoch may name the replay cut.
       coverage: const <RecoveryDomain>{},
-      postSnapshotSequence: null,
+      postSnapshotSequence: boundary,
     );
   }
 
@@ -5690,23 +5775,45 @@ class TuiGatewayClient
     if (committed) {
       _rememberLegacyEventRuntime(proof.runtimeSessionId);
       _markWatchdogRuntimeBusy(proof.runtimeSessionId);
-      for (final held in _replayCoordinator.takeCommittedRecoveryEvents(
-        proof.runtimeSessionId,
-      )) {
-        if (_events.isClosed) break;
-        _events.add(
-          TuiGatewayEvent(
-            type: held.type,
-            sessionId: held.sessionId,
-            sequence: held.sequence,
-            transportGeneration: _socketGeneration,
-            producerChannel: channel,
-            payload: held.payload,
-          ),
-        );
-      }
+      _publishCommittedRecoveryEvents(proof.runtimeSessionId, channel);
     }
     return committed;
+  }
+
+  /// Entrega a la pantalla los frames que la transacción de recuperación
+  /// retuvo mientras se resolvía la frontera snapshot/replay. Se extrajo del
+  /// [commitRecovery] para que `adoptSnapshotBoundary` (recuperación del visor)
+  /// publique los suyos por el mismo camino, sin duplicar el bucle.
+  void _publishCommittedRecoveryEvents(
+    String runtime,
+    WebSocketChannel channel,
+  ) {
+    for (final held in _replayCoordinator.takeCommittedRecoveryEvents(
+      runtime,
+    )) {
+      if (_events.isClosed) break;
+      _dispatchSessionEvent(held, _socketGeneration, channel);
+    }
+  }
+
+  @override
+  bool adoptViewerSnapshotBoundary({
+    required String runtimeSessionId,
+    required int baseline,
+    required String replayEpoch,
+  }) {
+    final channel = _channel;
+    if (!_connected || channel == null || _closed) return false;
+    if (replayEpoch != _replayEpoch) return false;
+    final adopted = _replayCoordinator.adoptSnapshotBoundary(
+      runtime: runtimeSessionId,
+      baseline: baseline,
+      socketGeneration: _socketGeneration,
+      channel: channel,
+      replayEpoch: replayEpoch,
+    );
+    if (adopted) _publishCommittedRecoveryEvents(runtimeSessionId, channel);
+    return adopted;
   }
 
   @override
@@ -8383,6 +8490,32 @@ class TuiGatewayClient
     surface.toParams(),
     queued: true,
   );
+
+  @override
+  Future<bool> supportsTurnIdempotency() async {
+    Map<String, dynamic> capabilities;
+    try {
+      capabilities = await _requestConnected(
+        'gateway.capabilities',
+        const <String, dynamic>{},
+        timeout: const Duration(seconds: 10),
+      );
+    } on TuiGatewayRpcError catch (error) {
+      if (_closed) rethrow;
+      // Only a validated refusal counts as "unsupported" (unknown method /
+      // bad params from an older gateway). Everything else — timeouts, lost
+      // connections, malformed frames (origin=malformed carries no
+      // failureKind) — is not a capability verdict: rethrow so the caller
+      // leaves its cache empty and asks again. Caching a false here would
+      // disable duplicate-submit protection for the whole session after one
+      // flaky probe.
+      if (error.code == -32601 || error.code == 4000 || error.code == 4001) {
+        return false;
+      }
+      rethrow;
+    }
+    return capabilities['turn_idempotency'] == true;
+  }
 
   @override
   Future<DesktopTurnStatus> getTurnStatus(

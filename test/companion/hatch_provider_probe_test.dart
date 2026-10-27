@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_android/core/companion/data/companion_error_codes.dart';
 import 'package:hermes_android/core/companion/hatch/hatch_provider.dart';
 import 'package:hermes_android/core/companion/hatch/hermes_hatch_provider.dart';
 import 'package:hermes_android/core/companion/hatch/mock_hatch_provider.dart';
@@ -49,7 +50,8 @@ void main() {
       );
       final a = await p.availability();
       expect(a.available, isFalse);
-      expect(a.reason, contains('no expone'));
+      // El motivo es un código estable; la pantalla lo localiza al pintar.
+      expect(a.code, CompanionErrorCode.hatchGatewayUnsupported);
     });
 
     test('probe que lanza → degrada a no disponible (no rompe)', () async {

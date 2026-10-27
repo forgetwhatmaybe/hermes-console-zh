@@ -5,6 +5,7 @@ import '../../companion/data/companion_import_service.dart';
 import '../../companion/data/petdex_remote_service.dart';
 import '../../companion/state/companion_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/companion_error_localization.dart';
 import '../../widgets/hermes_app_bar.dart';
 import '../../widgets/hermes_premium_ui.dart';
 import '../../widgets/hermes_ui.dart';
@@ -168,11 +169,13 @@ class _PetdexGalleryScreenState extends State<PetdexGalleryScreen> {
         if (route != null && route.isCurrent) Navigator.of(sheetCtx).pop();
       }
     } on CompanionImportException catch (e) {
-      _installError[pet.slug] = str.petdexInstallFailed(e.message);
-      messenger.notify(FeedbackKind.error, str.petdexInstallFailed(e.message));
+      final detail = localizedCompanionError(e, str);
+      _installError[pet.slug] = str.petdexInstallFailed(detail);
+      messenger.notify(FeedbackKind.error, str.petdexInstallFailed(detail));
     } on PetdexRemoteException catch (e) {
-      _installError[pet.slug] = str.petdexDownloadFailed(e.message);
-      messenger.notify(FeedbackKind.error, str.petdexDownloadFailed(e.message));
+      final detail = localizedCompanionError(e, str);
+      _installError[pet.slug] = str.petdexDownloadFailed(detail);
+      messenger.notify(FeedbackKind.error, str.petdexDownloadFailed(detail));
     } catch (e) {
       debugPrint(
         '[petdex-gallery] excepción silenciada (se avisa al usuario y se sigue): $e',

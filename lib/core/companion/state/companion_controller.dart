@@ -7,6 +7,7 @@ import '../../models/profile_pet.dart';
 import '../../models/profile_identity.dart';
 import '../../services/profile_pet_service.dart';
 import '../../widgets/mission_profile_avatar.dart';
+import '../data/companion_error_codes.dart';
 import '../data/companion_import_service.dart';
 import '../data/companion_preferences.dart';
 import '../data/companion_repository.dart';
@@ -801,7 +802,7 @@ class CompanionController extends ChangeNotifier {
   }) async {
     final root = await _repository.importedRoot();
     if (root == null) {
-      throw CompanionImportException('importación no disponible');
+      throw CompanionImportException(CompanionErrorCode.importUnavailable);
     }
     final protected = <String>{
       for (final c in _available)
@@ -823,14 +824,10 @@ class CompanionController extends ChangeNotifier {
   Future<HatchAvailability> hatchAvailability() async {
     final provider = hatchProvider;
     if (provider == null) {
-      return const HatchAvailability.unavailable(
-        'La generación de mascotas no está disponible en esta conexión.',
-      );
+      return HatchAvailability.coded(CompanionErrorCode.hatchUnavailable);
     }
     if (await _repository.importedRoot() == null) {
-      return const HatchAvailability.unavailable(
-        'No hay almacenamiento disponible para guardar la mascota.',
-      );
+      return HatchAvailability.coded(CompanionErrorCode.hatchStorage);
     }
     try {
       return await provider.availability();
@@ -838,9 +835,7 @@ class CompanionController extends ChangeNotifier {
       debugPrint(
         '[companion] excepción silenciada (se continúa sin propagar): $e',
       );
-      return const HatchAvailability.unavailable(
-        'No se pudo comprobar la generación de mascotas.',
-      );
+      return HatchAvailability.coded(CompanionErrorCode.hatchProbe);
     }
   }
 
@@ -854,11 +849,11 @@ class CompanionController extends ChangeNotifier {
   Future<Companion> hatch(String prompt) async {
     final provider = hatchProvider;
     if (provider == null) {
-      throw HatchException('La generación de mascotas no está disponible.');
+      throw HatchException.code(CompanionErrorCode.hatchUnavailable);
     }
     final root = await _repository.importedRoot();
     if (root == null) {
-      throw HatchException('No hay almacenamiento disponible.');
+      throw HatchException.code(CompanionErrorCode.hatchStorage);
     }
     final protected = <String>{
       for (final c in _available)

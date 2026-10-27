@@ -50,6 +50,7 @@ import '../services/voice/voice_service.dart';
 import '../services/voice/voice_settings.dart';
 import '../theme/app_theme.dart';
 import '../utils/api_error.dart';
+import '../utils/voice_error_localization.dart';
 import '../utils/voice_error.dart';
 import '../widgets/general_dock_shell.dart';
 import '../widgets/hermes_ui.dart' hide HermesSectionHeader;
@@ -764,7 +765,7 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen>
     } catch (e) {
       if (mounted) {
         _snack(
-          Strings.of(context).voiceDownloadFailed(e.toString()),
+          Strings.of(context).voiceDownloadFailed(localizedVoiceDownloadCause(e, Strings.of(context))),
         ); // mounted check before context use
       }
     } finally {
@@ -861,7 +862,7 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen>
       // Cancelación solicitada por el usuario: no es un fallo.
     } catch (e) {
       if (mounted) {
-        _snack(Strings.of(context).voiceDownloadFailed(e.toString()));
+        _snack(Strings.of(context).voiceDownloadFailed(localizedVoiceDownloadCause(e, Strings.of(context))));
       }
     } finally {
       if (mounted) setState(() => _sherpaBusyId = null);
@@ -894,7 +895,7 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen>
     } catch (e) {
       if (mounted) {
         _snack(
-          Strings.of(context).voiceDownloadFailed(e.toString()),
+          Strings.of(context).voiceDownloadFailed(localizedVoiceDownloadCause(e, Strings.of(context))),
         ); // mounted check before context use
       }
     } finally {

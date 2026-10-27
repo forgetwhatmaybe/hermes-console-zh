@@ -2235,7 +2235,10 @@ class _ThinkingTraceCardState extends State<ThinkingTraceCard> {
     final tasks = scope != null ? scope.status.tasks : _ownedTasks;
     return headerBuilder(
       context,
-      TurnStatusLine(fallbackState: _summary),
+      // ct1215: el estado del turno vive una sola vez, en el pie de la
+      // respuesta viva (`_AssistantMessage`). La cabecera de la traza no lo
+      // repite: solo aporta lo que el turno está haciendo.
+      const SizedBox.shrink(),
       Column(
         key: const ValueKey('thinking-trace-live'),
         crossAxisAlignment: CrossAxisAlignment.start,

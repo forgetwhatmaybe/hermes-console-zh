@@ -155,6 +155,9 @@ class _QueuedDrainGateway extends _QueueGateway
   );
 
   @override
+  Future<bool> supportsTurnIdempotency() async => false;
+
+@override
   Future<DesktopTurnStatus> getTurnStatus(
     String runtimeSessionId,
     String clientTurnId,

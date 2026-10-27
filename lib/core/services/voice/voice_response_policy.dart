@@ -156,8 +156,17 @@ class VoiceResponsePolicy {
         .replaceAll(RegExp(r'[^a-z0-9. ]'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
-    // Sin letras ni dígitos (vacío, espacios o solo puntuación "..."): nada útil.
-    if (!RegExp(r'[a-z0-9]').hasMatch(t)) return true;
+    // Sin letras ni dígitos (vacío, espacios o solo puntuación "…"): nada útil.
+    // El test de "quedó algo escrito" es por ESCRIPT, no por alfabeto: un turno
+    // chino/japonés/coreano sobrevive entero a la limpieza ASCII y no puede caer
+    // aquí, o cada dictado CJK se descartaría como alucinación. Puntuación CJK
+    // de ancho completo (，！？), símbolos (×÷) y emoji NO son \p{L}/\p{N}:
+    // solo ruido de signos sigue descartándose.
+    final keepsLettersOrDigits =
+        _cjkOrOtherLetters.hasMatch(raw) ||
+        _otherNumbers.hasMatch(raw) ||
+        RegExp(r'[a-z0-9]').hasMatch(t);
+    if (!keepsLettersOrDigits) return true;
     // Marcadores inequívocos de outro/subtítulos automáticos.
     const strongMarkers = [
       'amara.org',
@@ -204,6 +213,17 @@ class VoiceResponsePolicy {
     caseSensitive: false,
     unicode: true,
   );
+
+  /// Letras FUERA del alfabeto ASCII (CJK y demás escrituras): su presencia
+  /// tras la limpieza significa que el turno está escrito en otro idioma, no
+  /// que sea rango. Categoría Unicode L* (letter) del motor ECMAScript: puntuación
+  /// CJK de ancho completo (，！？ U+FF01..U+FF5E), símbolos (×÷) y emoji NO
+  /// son letras y siguen contando como "nada útil".
+  static final _cjkOrOtherLetters = RegExp(r'\p{L}', unicode: true);
+
+  /// Dígitos no ASCII (árabe-índico, etc.): misma lógica que [a-z0-9] para el
+  /// alfabeto latino, con la categoría Unicode N (número).
+  static final _otherNumbers = RegExp(r'\p{N}', unicode: true);
 
   /// Minúsculas + sin acentos/ñ, para que la detección no dependa de cómo el STT
   /// transcriba los acentos.

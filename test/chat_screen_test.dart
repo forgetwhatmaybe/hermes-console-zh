@@ -52,6 +52,7 @@ import 'package:record/record.dart';
 import 'package:hermes_android/core/services/generated_media_service.dart';
 import 'package:hermes_android/core/services/media_dimensions.dart';
 import 'package:hermes_android/core/services/media_prefetcher.dart';
+import 'package:hermes_android/core/widgets/chat_turn_activity.dart';
 import 'package:hermes_android/main.dart';
 import 'package:hermes_android/l10n/app_localizations.dart';
 import 'package:hermes_android/core/companion/models/companion_presence_level.dart';
@@ -809,6 +810,9 @@ class _UiRewindGateway
   }
 
   @override
+  Future<bool> supportsTurnIdempotency() async => false;
+
+@override
   Future<DesktopTurnStatus> getTurnStatus(
     String sessionId,
     String clientTurnId,
@@ -2344,6 +2348,9 @@ class _RecoverableSubmissionGateway extends _SubmissionGateway
   }
 
   @override
+  Future<bool> supportsTurnIdempotency() async => false;
+
+@override
   Future<DesktopTurnStatus> getTurnStatus(
     String sessionId,
     String clientTurnId,
@@ -3975,6 +3982,56 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('turn status line docks above the composer while streaming', (
+    tester,
+  ) async {
+    final connection = _remoteConn('status-dock-streaming');
+    final gateway = _SubmissionGateway();
+    await pumpChat(tester, connection: connection, desktopGateway: gateway);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final composer = find.byType(TextField).last;
+    await tester.tap(composer);
+    await tester.pump();
+    tester.testTextInput.enterText('hola');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('send')));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Streaming: exactly one status line, above the composer (the old
+    // composer-status-dock overlay was removed: the line now lives between the
+    // assistant body and the token footer).
+    expect(find.byType(TurnStatusLine), findsOneWidget);
+    final statusRect = tester.getRect(find.byType(TurnStatusLine));
+    expect(
+      statusRect.bottom,
+      lessThanOrEqualTo(tester.getRect(composer).top),
+      reason: 'status line must sit above the composer',
+    );
+
+    // Scrolling the transcript must not add a second status line.
+    await tester.drag(find.byType(ListView).first, const Offset(0, -300));
+    await tester.pump();
+    expect(find.byType(TurnStatusLine), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(TurnStatusLine)).bottom,
+      lessThanOrEqualTo(tester.getRect(composer).top),
+    );
+
+    // End the turn so the live wall-clock timers settle before disposal.
+    gateway.emitComplete();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('turn status line is absent when idle', (tester) async {
+    final connection = _remoteConn('status-dock-idle');
+    final gateway = _SubmissionGateway();
+    await pumpChat(tester, connection: connection, desktopGateway: gateway);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(TurnStatusLine), findsNothing);
+  });
 
   testWidgets('keyboard stays open while the agent streams a reply', (
     tester,
@@ -19944,6 +20001,9 @@ void main() {
       _SubmissionGateway gateway,
       String id, {
       bool withX = true,
+      StoredSessionMessageLoader? storedMessageLoader,
+      FlutterSecureStorage? draftSecureStorage,
+      ValueChanged<AttachmentDraft>? onMaterialized,
     }) async {
       final temp = Directory.systemTemp.createTempSync('chat-retry-batch-');
       addTearDown(() {
@@ -19980,10 +20040,14 @@ void main() {
         connection: _remoteConn(id),
         desktopGateway: gateway,
         messages: [for (final message in durable.reversed) Map.of(message)],
-        storedMessageLoader: (_, _) async => [
-          for (final message in durable) Map.of(message),
-        ],
-        attachmentMaterializer: (attachment) async => attachment,
+        storedMessageLoader:
+            storedMessageLoader ??
+            (_, _) async => [for (final message in durable) Map.of(message)],
+        draftSecureStorage: draftSecureStorage,
+        attachmentMaterializer: (attachment) async {
+          onMaterialized?.call(attachment);
+          return attachment;
+        },
         attachmentPrivateCopyDeleter: (_) async => true,
         initialPreferences: {
           'approval_global_mode': ApprovalMode.yolo.storageKey,
@@ -20128,6 +20192,440 @@ void main() {
       expect(composerCards(tester), isEmpty);
       gateway.emitComplete('respuesta A');
       await tester.pump(const Duration(seconds: 10));
+      expect(tester.takeException(), isNull);
+    });
+
+    for (final scenario in const [
+      (
+        name: 'before debounce',
+        text: 'successor B',
+        attach: false,
+        saved: false,
+        leave: false,
+      ),
+      (
+        name: 'after debounce',
+        text: 'successor B',
+        attach: false,
+        saved: true,
+        leave: false,
+      ),
+      (
+        name: 'attachment only',
+        text: '',
+        attach: true,
+        saved: true,
+        leave: false,
+      ),
+      (
+        name: 'same text new attachment',
+        text: 'hola',
+        attach: true,
+        saved: false,
+        leave: false,
+      ),
+      (
+        name: 'after route disposal',
+        text: 'successor B',
+        attach: false,
+        saved: true,
+        leave: true,
+      ),
+    ]) {
+      testWidgets('AUD05 ACK preserves successor ${scenario.name}', (
+        tester,
+      ) async {
+        final temp = Directory.systemTemp.createTempSync('chat-aud05-ack-');
+        addTearDown(() {
+          if (temp.existsSync()) temp.deleteSync(recursive: true);
+        });
+        const pathProvider = MethodChannel('plugins.flutter.io/path_provider');
+        TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(pathProvider, (call) async => temp.path);
+        addTearDown(
+          () => TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(pathProvider, null),
+        );
+        final gateway = _SubmissionGateway()..submitGate = Completer<void>();
+        AttachmentDraft? attachmentB;
+        await pumpChat(
+          tester,
+          connection: _remoteConn('conn-aud05-ack-${scenario.name}'),
+          desktopGateway: gateway,
+          attachmentMaterializer: (attachment) async {
+            attachmentB = attachment;
+            return attachment;
+          },
+          attachmentPrivateCopyDeleter: (_) async => true,
+        );
+        final screen = tester.widget<ChatScreen>(find.byType(ChatScreen));
+        await tester.enterText(find.byType(TextField), 'hola');
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.byKey(const ValueKey('send')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(gateway.submissions, ['hola']);
+        expect(composerText(tester), isEmpty);
+        await tester.enterText(find.byType(TextField), scenario.text);
+        if (scenario.attach) await pasteY(tester);
+        if (scenario.saved) {
+          await tester.pump(const Duration(milliseconds: 400));
+        }
+        final before = await screen.draftStoreOverride!.load(
+          screen.connection.id,
+          screen.session.id,
+          profile: 'default',
+        );
+        if (scenario.saved) {
+          expect(before.text, scenario.text);
+          expect(before.attachments, hasLength(scenario.attach ? 1 : 0));
+          expect(before.submittedTurnClientTurnId, isNull);
+        }
+        final visibleNames = composerCards(tester)
+            .map((card) => card.name)
+            .toList();
+        if (scenario.leave) {
+          Navigator.of(tester.element(find.byType(ChatScreen))).pop();
+          await tester.pump(const Duration(milliseconds: 400));
+        }
+        gateway.submitGate!.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        final after = await screen.draftStoreOverride!.load(
+          screen.connection.id,
+          screen.session.id,
+          profile: 'default',
+        );
+        expect(after.text, scenario.text);
+        expect(after.attachments.map((item) => item.name), visibleNames);
+        expect(after.attachments.map((item) => item.toJson()), [
+          if (scenario.attach) attachmentB!.toJson(),
+        ]);
+        if (scenario.saved) {
+          expect(
+            after.attachments.map((item) => item.toJson()),
+            before.attachments.map((item) => item.toJson()),
+          );
+        }
+        expect(after.submittedTurnClientTurnId, isNull);
+        expect(after.preparedTurnClientTurnId, isNull);
+        if (!scenario.leave) {
+          expect(composerText(tester), scenario.text);
+          expect(composerCards(tester).map((card) => card.name), visibleNames);
+        }
+        gateway.emitComplete('delivered A');
+        await tester.pump(const Duration(seconds: 1));
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('AUD05 automatic settlement preserves same-text successor '
+        'attachments in encrypted storage', (tester) async {
+      final temp = Directory.systemTemp.createTempSync('chat-aud05-auto-');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      final file = File('${temp.path}/successor.pdf')
+        ..writeAsBytesSync([0x25, 0x50, 0x44, 0x46, 2]);
+      final attachmentB = AttachmentDraft(
+        localId: 'aud05-successor-y',
+        type: AttachmentType.document,
+        name: 'successor.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 5,
+        localPath: file.path,
+      );
+      const connectionId = 'conn-aud05-auto';
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final turnA = PreparedTurn(
+        connectionId: connectionId,
+        sessionId: 'sess-test',
+        clientTurnId: 'aud05-auto-a',
+        createdAtMs: now,
+        updatedAtMs: now,
+        text: 'hola',
+        fullText: 'hola',
+        attachments: const [],
+        model: 'hermes-agent',
+        profile: 'default',
+        state: PreparedTurnState.ambiguous,
+        retryBoundary: PreparedTurnRetryBoundary.identity(rowId: 10),
+      );
+      secureStore['chat_turn_outbox_v1'] = jsonEncode({
+        turnA.storageId: turnA.toJson(),
+      });
+      secureStore[ChatDraftStore.keyForTesting(
+        connectionId,
+        'sess-test',
+        profile: 'default',
+      )] = jsonEncode({
+        'savedAt': now,
+        'text': 'hola',
+        'attachments': [attachmentB.toJson()],
+      });
+      final gateway = _SubmissionGateway();
+      final ts = now / 1000;
+      await pumpChat(
+        tester,
+        connection: _remoteConn(connectionId),
+        desktopGateway: gateway,
+        storedMessageLoader: (_, _) async => [
+          {'id': 10, 'role': 'user', 'content': 'before', 'timestamp': ts - 60},
+          {
+            'id': 11,
+            'role': 'assistant',
+            'content': 'ok',
+            'timestamp': ts - 59,
+          },
+          {'id': 12, 'role': 'user', 'content': 'hola', 'timestamp': ts + 1},
+        ],
+      );
+      for (var frame = 0; frame < 30; frame++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      final screen = tester.widget<ChatScreen>(find.byType(ChatScreen));
+      final after = await screen.draftStoreOverride!.load(
+        connectionId,
+        'sess-test',
+        profile: 'default',
+      );
+      expect(after.text, 'hola');
+      expect(after.attachments.map((item) => item.toJson()), [
+        attachmentB.toJson(),
+      ]);
+      expect(after.submittedTurnClientTurnId, isNull);
+      expect(after.preparedTurnClientTurnId, isNull);
+      expect(composerText(tester), 'hola');
+      expect(composerCards(tester).single.name, 'successor.pdf');
+      expect(
+        await TurnOutboxStore().loadAllForChat(
+          connectionId,
+          'sess-test',
+          profile: 'default',
+        ),
+        isEmpty,
+      );
+      expect(gateway.submissions, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('AUD05 manual settlement preserves attachments added during '
+        'the transcript read', (tester) async {
+      Completer<List<Map<String, dynamic>>>? readGate;
+      var gatedReads = 0;
+      final gateway = _SubmissionGateway()..submitError = lost;
+      await pumpOfflineBatch(
+        tester,
+        gateway,
+        'conn-aud05-manual-read',
+        withX: false,
+        storedMessageLoader: (_, _) async {
+          if (readGate != null) {
+            gatedReads++;
+            return readGate.future;
+          }
+          return [for (final message in durable) Map.of(message)];
+        },
+      );
+      readGate = Completer<List<Map<String, dynamic>>>();
+      await tester.tap(find.text('↺ reintentar'));
+      await tester.pump();
+      expect(gatedReads, 1);
+      final cardsB = await pasteY(tester);
+      await tester.pump(const Duration(milliseconds: 400));
+      final screen = tester.widget<ChatScreen>(find.byType(ChatScreen));
+      final before = await screen.draftStoreOverride!.load(
+        screen.connection.id,
+        screen.session.id,
+        profile: 'default',
+      );
+      expect(before.text, 'hola');
+      expect(before.attachments, hasLength(1));
+      final attachmentB = before.attachments.single.toJson();
+      readGate.complete([
+        ...durable,
+        {'role': 'user', 'content': 'hola', 'message_id': 'u-2'},
+        {'role': 'assistant', 'content': 'delivered A', 'message_id': 'a-2'},
+      ]);
+      await tester.pump(const Duration(milliseconds: 800));
+      final after = await screen.draftStoreOverride!.load(
+        screen.connection.id,
+        screen.session.id,
+        profile: 'default',
+      );
+      expect(after.text, 'hola');
+      expect(after.attachments.map((item) => item.toJson()), [attachmentB]);
+      expect(after.submittedTurnClientTurnId, isNull);
+      expect(after.preparedTurnClientTurnId, isNull);
+      expect(composerText(tester), 'hola');
+      expect(composerCards(tester).map((card) => card.name), cardsB);
+      expect(gateway.submissions, ['hola']);
+      expect(tester.takeException(), isNull);
+    });
+
+    for (final waitAt in ['outbox write', 'draft read']) {
+      testWidgets('AUD05 settlement rechecks batch after $waitAt', (
+        tester,
+      ) async {
+        var deliveredA = false;
+        var holdDraftRead = false;
+        final readEntered = Completer<void>();
+        final storageGate = Completer<void>();
+        AttachmentDraft? successor;
+        final gateway = _SubmissionGateway()..submitError = lost;
+        await pumpOfflineBatch(
+          tester,
+          gateway,
+          'conn-aud05-settle-$waitAt',
+          withX: false,
+          storedMessageLoader: (_, _) async => [
+            ...durable,
+            if (deliveredA)
+              {'role': 'user', 'content': 'hola', 'message_id': 'u-2'},
+            if (deliveredA)
+              {
+                'role': 'assistant',
+                'content': 'delivered A',
+                'message_id': 'a-2',
+              },
+          ],
+          draftSecureStorage: _MemoryDraftSecureStorage(
+            secureStore,
+            beforeRead: (key) async {
+              if (holdDraftRead && key.startsWith('chat_draft_v3.')) {
+                if (!readEntered.isCompleted) readEntered.complete();
+                await storageGate.future;
+              }
+            },
+          ),
+          onMaterialized: (attachment) => successor = attachment,
+        );
+        if (waitAt == 'outbox write') {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          await TurnOutboxStore().save(
+            PreparedTurn(
+              connectionId: 'conn-aud05-neighbor',
+              sessionId: 'neighbor',
+              clientTurnId: 'aud05-neighbor',
+              createdAtMs: now,
+              updatedAtMs: now,
+              text: 'unrelated pending turn',
+              attachments: const [],
+              model: 'hermes-agent',
+              profile: 'default',
+            ),
+          );
+        }
+        final writesBefore = outboxWriteCalls;
+        if (waitAt == 'outbox write') {
+          delayedOutboxWrite = storageGate;
+        } else {
+          holdDraftRead = true;
+        }
+        deliveredA = true;
+        await tester.tap(find.text('↺ reintentar'));
+        for (var frame = 0; frame < 20; frame++) {
+          await tester.pump(const Duration(milliseconds: 10));
+          if (waitAt == 'outbox write'
+              ? outboxWriteCalls > writesBefore
+              : readEntered.isCompleted) {
+            break;
+          }
+        }
+        expect(
+          waitAt == 'outbox write'
+              ? outboxWriteCalls > writesBefore
+              : readEntered.isCompleted,
+          isTrue,
+        );
+        final cardsB = await pasteY(tester);
+        expect(successor, isNotNull);
+        await tester.pump(const Duration(milliseconds: 400));
+        holdDraftRead = false;
+        delayedOutboxWrite = null;
+        storageGate.complete();
+        await tester.pump(const Duration(milliseconds: 800));
+        final screen = tester.widget<ChatScreen>(find.byType(ChatScreen));
+        final after = await screen.draftStoreOverride!.load(
+          screen.connection.id,
+          screen.session.id,
+          profile: 'default',
+        );
+        expect(after.text, 'hola');
+        expect(after.attachments.map((item) => item.toJson()), [
+          successor!.toJson(),
+        ]);
+        expect(after.submittedTurnClientTurnId, isNull);
+        expect(after.preparedTurnClientTurnId, isNull);
+        expect(composerText(tester), 'hola');
+        expect(composerCards(tester).map((card) => card.name), cardsB);
+        expect(gateway.submissions, ['hola']);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('AUD05 ordinary Send submits same-text successor attachment '
+        'as one new batch', (tester) async {
+      var deliveredA = false;
+      final gateway = _SubmissionGateway()..submitError = lost;
+      await pumpOfflineBatch(
+        tester,
+        gateway,
+        'conn-aud05-ordinary-send',
+        withX: false,
+        storedMessageLoader: (_, _) async => [
+          ...durable,
+          if (deliveredA)
+            {'role': 'user', 'content': 'hola', 'message_id': 'u-2'},
+          if (deliveredA)
+            {
+              'role': 'assistant',
+              'content': 'delivered A',
+              'message_id': 'a-2',
+            },
+        ],
+      );
+      final turnA = storedOutboxTurn()['client_turn_id'];
+      await pasteY(tester);
+      await tester.pump(const Duration(milliseconds: 400));
+      final screen = tester.widget<ChatScreen>(find.byType(ChatScreen));
+      final before = await screen.draftStoreOverride!.load(
+        screen.connection.id,
+        screen.session.id,
+        profile: 'default',
+      );
+      expect(before.attachments, hasLength(1));
+      final attachmentB = before.attachments.single.toJson();
+      deliveredA = true;
+      gateway
+        ..submitError = null
+        ..submitGate = Completer<void>();
+      await tester.tap(find.byKey(const ValueKey('send')));
+      await pumpUntilReal(
+        tester,
+        () => gateway.submissions.length == 2,
+        timeoutMessage: 'new attachment batch B was not handed off',
+      );
+      expect(gateway.submissions, hasLength(2));
+      expect(gateway.submissions.first, 'hola');
+      expect(gateway.imageAttachCalls, 1);
+      final handedOff = await screen.draftStoreOverride!.load(
+        screen.connection.id,
+        screen.session.id,
+        profile: 'default',
+      );
+      expect(handedOff.text, 'hola');
+      expect(
+        handedOff.attachments.single.sameSourceAs(before.attachments.single),
+        isTrue,
+      );
+      expect(handedOff.attachments.single.localId, attachmentB['local_id']);
+      expect(handedOff.submittedTurnClientTurnId, isNotNull);
+      expect(handedOff.submittedTurnClientTurnId, isNot(turnA));
+      gateway.submitGate!.complete();
+      await tester.pump(const Duration(milliseconds: 600));
+      gateway.emitComplete('delivered B');
+      await tester.pump(const Duration(seconds: 1));
       expect(tester.takeException(), isNull);
     });
 
@@ -21926,7 +22424,7 @@ void main() {
         ],
       );
 
-      // ct1215: el turno vivo cuenta su estado bajo el nombre.
+      // ct1215: el turno vivo cuenta su estado bajo el nombre, una sola vez.
       expect(find.byKey(const ValueKey('turn-status-line')), findsOneWidget);
       expect(
         find.byKey(const ValueKey('assistant-header-name')),
@@ -21948,7 +22446,7 @@ void main() {
         ],
       );
 
-      // ct1215: el turno vivo cuenta su estado bajo el nombre.
+      // ct1215: el turno vivo cuenta su estado bajo el nombre, una sola vez.
       expect(find.byKey(const ValueKey('turn-status-line')), findsOneWidget);
       expect(
         find.byKey(const ValueKey('assistant-header-name')),
@@ -22019,7 +22517,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
 
-      // ct1215: el turno vivo cuenta su estado bajo el nombre.
+      // ct1215: el turno vivo cuenta su estado bajo el nombre, una sola vez.
       expect(find.byKey(const ValueKey('turn-status-line')), findsOneWidget);
       expect(
         find.byKey(const ValueKey('assistant-header-name')),
@@ -26971,7 +27469,7 @@ void main() {
 
       expect(chat.state, ChatPipelineState.waiting);
       // Sin texto aún: la cabecera con la línea de estado del turno.
-      expect(find.byKey(const ValueKey('turn-status-line')), findsOneWidget);
+      expect(find.byKey(const ValueKey('turn-status-line')), findsWidgets);
       _expectNoTurnFace(tester);
       expect(find.byType(CompanionStatusIndicator), findsNothing);
       expectIslandPetStill(tester);
@@ -27246,7 +27744,7 @@ void main() {
     await tester.pump();
 
     // Vivo: la línea de estado del turno bajo el título.
-    expect(find.byKey(const ValueKey('turn-status-line')), findsOneWidget);
+    expect(find.byKey(const ValueKey('turn-status-line')), findsWidgets);
 
     gateway.emit('message.complete', const {
       'text': 'Respuesta terminada.',
@@ -29678,6 +30176,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       // UNA isla, sin contador: el progreso («0/3») vive en la lista de
       // tareas del turno y en el panel, no en una pastilla «Tareas» aparte.
+      // ignore: avoid_print
+      print('DBG pill mid-stream: ${find.byKey(const ValueKey('activity-pill')).evaluate().length}');
       expect(pill, findsOneWidget);
       expect(find.byKey(const ValueKey('agent-task-pill')), findsNothing);
       expect(find.byKey(const ValueKey('activity-task-chip')), findsNothing);
@@ -29720,6 +30220,12 @@ void main() {
       gateway.emit('message.complete', const {'text': 'PUBLIC_TASKS_DONE'});
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
+      // ignore: avoid_print
+      print('DBG pill after complete: ${find.byKey(const ValueKey('activity-pill')).evaluate().length}');
+      // ignore: avoid_print
+      print('DBG header exists: ${find.byType(FloatingChatHeader).evaluate().length}');
+      // ignore: avoid_print
+      print('DBG isStreaming: ${chat.isStreaming}');
       expect(pill, findsOneWidget);
       expect(
         find.descendant(
@@ -30642,7 +31148,8 @@ void main() {
                 .byKey(chatLiveAssistantViewportKey)
                 .evaluate()
                 .length,
-            // ct1215: the live turn says its state in one status line.
+            // ct1215: the live turn says its state in exactly one status line,
+            // inside its own message (the composer dock no longer exists).
             'workingHeaders': find
                 .byKey(const ValueKey('turn-status-line'))
                 .evaluate()
@@ -33817,9 +34324,13 @@ void main() {
       expect(chat.activeSubagentCount, 1);
       expect(find.byType(ThinkingTraceCard), findsOneWidget);
 
-      // ct1215: the live turn says its state in one status line.
-      Finder workingHeaders() => find.byKey(const ValueKey('turn-status-line'));
-      expect(workingHeaders(), findsOneWidget);
+      // ct1215: the live turn says its state in exactly one status line.
+      // The composer dock is gone; nothing else may paint a second one.
+      expect(find.byKey(const ValueKey('composer-status-dock')), findsNothing);
+      int workingHeaderCount() =>
+          find.byKey(const ValueKey('turn-status-line')).evaluate().length;
+
+      expect(workingHeaderCount(), 1);
 
       await tester.tap(find.byIcon(Icons.edit_outlined).last);
       await tester.pump();
@@ -33852,7 +34363,7 @@ void main() {
       expect(find.textContaining('delega esta otra tarea'), findsOneWidget);
       // Only one live turn exists, so at most one "Trabajando…" header.
       expect(
-        workingHeaders().evaluate().length,
+        workingHeaderCount(),
         lessThanOrEqualTo(1),
         reason: 'two live headers means the old turn survived the edit',
       );

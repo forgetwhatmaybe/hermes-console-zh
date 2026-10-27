@@ -113,7 +113,10 @@ Widget _turn(
     children: [
       MessageAvatarHeader(
         name: 'Hermes',
-        subtitle: summary,
+        // ct1215: the live turn's state is its own line. The chat now paints
+        // it between the body and the token footer; the card no longer
+        // supplies it, so this harness draws the same widget itself.
+        subtitle: active ? const TurnStatusLine() : summary,
         actions: [
           for (var i = 0; i < actions; i++)
             const SizedBox.square(dimension: 48),

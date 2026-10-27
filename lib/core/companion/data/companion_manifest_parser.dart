@@ -2,14 +2,22 @@ import 'dart:convert';
 
 import '../models/companion.dart';
 import '../models/companion_animation_state.dart';
+import 'companion_error_codes.dart';
 
 /// Error de validación de un `pet.json`.
-class CompanionManifestException implements Exception {
-  final String message;
-  CompanionManifestException(this.message);
+///
+/// Lleva un [CompanionErrorCode] estable, nunca texto de interfaz.
+class CompanionManifestException implements CompanionCodedError {
+  @override
+  final CompanionErrorCode code;
+
+  CompanionManifestException(this.code);
+
+  /// Identificador estable del fallo (el `name` del código).
+  String get message => code.name;
 
   @override
-  String toString() => 'CompanionManifestException: $message';
+  String toString() => 'CompanionManifestException: ${code.name}';
 }
 
 /// Parsea y valida un `pet.json` (contenido) a un [Companion].
@@ -32,73 +40,72 @@ class CompanionManifestParser {
     try {
       final decoded = json.decode(jsonString);
       if (decoded is! Map<String, dynamic>) {
-        throw CompanionManifestException('la raíz no es un objeto JSON');
+        throw CompanionManifestException(CompanionErrorCode.manifestRootNotObject);
       }
       map = decoded;
-    } on FormatException catch (e) {
-      throw CompanionManifestException('JSON inválido: ${e.message}');
+    } on FormatException {
+      throw CompanionManifestException(CompanionErrorCode.manifestInvalidJson);
     }
 
     final manifestSlug = (map['slug'] as String?)?.trim() ?? '';
     if (manifestSlug.isEmpty) {
-      throw CompanionManifestException('falta "slug"');
+      throw CompanionManifestException(CompanionErrorCode.manifestMissingSlug);
     }
     if (!_slugPattern.hasMatch(manifestSlug)) {
-      throw CompanionManifestException('slug con caracteres no permitidos');
+      throw CompanionManifestException(CompanionErrorCode.manifestSlugChars);
     }
     if (manifestSlug != slug) {
-      throw CompanionManifestException(
-          'slug "$manifestSlug" no coincide con la carpeta "$slug"');
+      throw CompanionManifestException(CompanionErrorCode.manifestSlugMismatch);
     }
 
     final grid = map['grid'];
     if (grid is! Map<String, dynamic>) {
-      throw CompanionManifestException('falta "grid"');
+      throw CompanionManifestException(CompanionErrorCode.manifestMissingGrid);
     }
-    final frameWidth = _int(grid['frameWidth'], 'grid.frameWidth');
-    final frameHeight = _int(grid['frameHeight'], 'grid.frameHeight');
-    final cols = _int(grid['cols'], 'grid.cols');
-    final rows = _int(grid['rows'], 'grid.rows');
+    final frameWidth = _int(grid['frameWidth']);
+    final frameHeight = _int(grid['frameHeight']);
+    final cols = _int(grid['cols']);
+    final rows = _int(grid['rows']);
     if (frameWidth <= 0 || frameHeight <= 0 || cols <= 0 || rows <= 0) {
-      throw CompanionManifestException('dimensiones de "grid" inválidas');
+      throw CompanionManifestException(CompanionErrorCode.manifestGridInvalid);
     }
 
-    final fps = _num(map['fps'], 'fps').toDouble();
+    final fps = _num(map['fps']).toDouble();
     if (fps <= 0) {
-      throw CompanionManifestException('"fps" debe ser > 0');
+      throw CompanionManifestException(CompanionErrorCode.manifestFpsInvalid);
     }
 
     final spritesheet = (map['spritesheet'] as String?)?.trim();
     if (spritesheet == null || spritesheet.isEmpty) {
-      throw CompanionManifestException('falta "spritesheet"');
+      throw CompanionManifestException(CompanionErrorCode.manifestMissingSpritesheet);
     }
 
     final statesRaw = map['states'];
     if (statesRaw is! Map<String, dynamic>) {
-      throw CompanionManifestException('falta "states"');
+      throw CompanionManifestException(CompanionErrorCode.manifestMissingStates);
     }
     final states = <CompanionAnimationState, RowSpec>{};
     statesRaw.forEach((key, value) {
       final state = companionStateFromId(key);
       if (state == null) return; // ignora estados desconocidos (tolerante)
       if (value is! Map<String, dynamic>) {
-        throw CompanionManifestException('el estado "$key" no es un objeto');
+        throw CompanionManifestException(CompanionErrorCode.manifestStateNotObject);
       }
-      final row = _int(value['row'], 'states.$key.row');
-      final frameCount = _int(value['frameCount'], 'states.$key.frameCount');
+      final row = _int(value['row']);
+      final frameCount = _int(value['frameCount']);
       final loop = value['loop'] as bool? ?? state.loopsByDefault;
       if (row < 0 || row >= rows) {
-        throw CompanionManifestException('estado "$key": "row" fuera de rango');
+        throw CompanionManifestException(CompanionErrorCode.manifestStateRowRange);
       }
       if (frameCount <= 0 || frameCount > cols) {
         throw CompanionManifestException(
-            'estado "$key": "frameCount" fuera de rango');
+            CompanionErrorCode.manifestStateFrameRange);
       }
       states[state] = RowSpec(row: row, frameCount: frameCount, loop: loop);
     });
 
     if (!states.containsKey(CompanionAnimationState.idle)) {
-      throw CompanionManifestException('"states" debe incluir "idle"');
+      throw CompanionManifestException(CompanionErrorCode.manifestMissingIdle);
     }
 
     // Filas de animación extra (opcional): animaciones sin estado nombrado.
@@ -147,14 +154,14 @@ class CompanionManifestParser {
     );
   }
 
-  static int _int(dynamic value, String field) {
+  static int _int(dynamic value) {
     if (value is int) return value;
     if (value is num) return value.toInt();
-    throw CompanionManifestException('"$field" debe ser un entero');
+    throw CompanionManifestException(CompanionErrorCode.manifestFieldNotInteger);
   }
 
-  static num _num(dynamic value, String field) {
+  static num _num(dynamic value) {
     if (value is num) return value;
-    throw CompanionManifestException('"$field" debe ser numérico');
+    throw CompanionManifestException(CompanionErrorCode.manifestFieldNotNumeric);
   }
 }

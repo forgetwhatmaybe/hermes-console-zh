@@ -182,6 +182,8 @@ String activeChatDesktopRecoveryDiagnostic(Object error) {
 }
 
 const _sessionNotOwnedReason = 'SESSION_NOT_OWNED';
+const _sessionOwnerBusyReason = 'SESSION_OWNER_BUSY';
+const _sessionOwnerUnconfirmedReason = 'SESSION_OWNER_UNCONFIRMED';
 const _maxConcurrentSessionsReason = 'MAX_CONCURRENT_SESSIONS';
 const _sessionCoordinationUnavailableReason =
     'SESSION_COORDINATION_UNAVAILABLE';
@@ -407,6 +409,18 @@ String activeChatPromptFailureUiMessage(
                   'server and try again.'
             : 'Hermes no pudo reservar esta conversación con seguridad. '
                   'Revisa el servidor y vuelve a intentarlo.',
+      _sessionOwnerBusyReason =>
+        english
+            ? 'The gateway is running a turn in this chat; delivery was not '
+                  'confirmed. Send it again when that turn ends.'
+            : 'El gateway está ejecutando un turno en este chat: la entrega '
+                  'no quedó confirmada. Vuelve a enviarlo cuando termine.',
+      _sessionOwnerUnconfirmedReason =>
+        english
+            ? 'The gateway did not confirm this message; it may already be '
+                  'queued there. Check the chat before sending it again.'
+            : 'El gateway no confirmó este mensaje; puede que ya esté en su '
+                  'cola. Revisa el chat antes de enviarlo otra vez.',
       _ =>
         english
             ? 'The message could not be sent. Try again.'
@@ -1951,6 +1965,25 @@ List<TranscriptMessageIdentity> _transcriptIdentities(
 
 bool _hasDurableTranscriptIdentity(Map<String, dynamic> message) =>
     _transcriptMessageIdentity(message) != null;
+
+/// Everything a viewer's truncated-replay snapshot is bound to when it is
+/// requested (Task 3, plan r4 step 1). The answer may only be applied while
+/// every item still matches: a session switch, a runtime change, a reconnect
+/// that moved the socket generation or the replay epoch, a new turn or a new
+/// viewer convergence generation makes the snapshot describe another world.
+typedef _ViewerSnapshotBinding = ({
+  String connectionId,
+  String storedSessionId,
+  String serverSessionId,
+  String profile,
+  String runtimeSessionId,
+  int? socketGeneration,
+  String replayEpoch,
+  int turnEpoch,
+  int viewerConvergenceEpoch,
+  int? viewerFreshBusyEpoch,
+  int recoveryRun,
+});
 
 bool _allTranscriptRowsHaveDurableIds(Iterable<Map<String, dynamic>> messages) {
   final seen = <TranscriptMessageIdentity>[];
@@ -5729,10 +5762,22 @@ class ActiveChat {
     if (_turnUsageSessionId != _desktopRuntimeSessionId) {
       _turnUsageSessionId = _desktopRuntimeSessionId;
     }
-    final output = _turnUsageDelta(
-      _usageTokenValue(usage['output']),
-      _turnUsageBaselineOutput,
-    );
+    final outputNow = _usageTokenValue(usage['output']);
+    // Contador de sesión RESETEADO (backend rearrancado: output < base): reancorar la
+    // base al valor recién visto para que los siguientes ticks cuenten desde el nuevo
+    // contador, en lugar de quedarse en 0 hasta el fin de la ronda.
+    if (outputNow != null &&
+        _turnUsageBaselineOutput != null &&
+        outputNow < _turnUsageBaselineOutput!) {
+      _turnUsageBaselineOutput = outputNow;
+    }
+    if (_turnUsageBaselineTotal != null) {
+      final totalNow = _usageTokenValue(usage['total']);
+      if (totalNow != null && totalNow < _turnUsageBaselineTotal!) {
+        _turnUsageBaselineTotal = totalNow;
+      }
+    }
+    final output = _turnUsageDelta(outputNow, _turnUsageBaselineOutput);
     if (output != null) {
       _liveTurnTokens = output;
     }
@@ -5911,6 +5956,16 @@ class ActiveChat {
   /// visor (solo lee; nunca adopta runtime).
   bool _desktopAutomaticReattachForConvergence = false;
 
+  /// Generación del intento de continuación por snapshot de un visor
+  /// (Task 3). Cada intento la incrementa; una respuesta que llega cuando ya
+  /// empezó otro intento (u otro turno) se descarta por binding.
+  int _viewerRecoveryRuns = 0;
+
+  /// Socket que ya nos avisó de un replay truncado (Task 3): el chat se
+  /// suscribe para leer el snapshot autoritativo y, SOLO si se aplica
+  /// completo, adoptar su frontera snapshot/replay.
+  HermesDesktopReplaySnapshotGateway? _truncatedReplayGateway;
+
   /// Equivalente a `sawAssistantPayload` de Desktop: prueba de que el runtime
   /// llegó a arrancar este turno. Recién enviado, el backend informa la sesión
   /// como inactiva mientras el stream local ya espera su primer frame, y
@@ -5923,6 +5978,47 @@ class ActiveChat {
     return _turnSubmittedAtMs != null ||
         (delivery != null &&
             delivery.current.state != PreparedTurnState.terminal);
+  }
+
+  /// True while the live streaming turn was submitted from THIS surface. A
+  /// viewer turn (another surface submitted it; we only observe it) must still
+  /// reconcile the durable transcript mid-stream, while an own turn keeps
+  /// passive durable reads excluded — a read there would paint a duplicate
+  /// prompt/reply pair once the turn settles.
+  bool get clientOwnsLiveTurn => isStreaming && _clientSubmittedCurrentTurn;
+
+  /// Transport-recovery generation of the forced durable read.
+  ///
+  /// Every recovery edge (a shown transport loss that clears) bumps
+  /// [_transportRecoveryDurableReadEpoch]; the passive reader compares it with
+  /// [_transportRecoveryDurableReadCompletedEpoch] to know that the first read
+  /// of the generation must be a FULL page read — the one-row tail probe
+  /// cannot vouch for a gap it was deaf to — and whether a failed or
+  /// superseded read still owes that read.
+  int _transportRecoveryDurableReadEpoch = 0;
+  int _transportRecoveryDurableReadCompletedEpoch = 0;
+
+  int get transportRecoveryDurableReadEpoch =>
+      _transportRecoveryDurableReadEpoch;
+
+  int get transportRecoveryDurableReadCompletedEpoch =>
+      _transportRecoveryDurableReadCompletedEpoch;
+
+  /// A recovery edge: whatever the durable store gained while the socket was
+  /// down was never observed here.
+  ///
+  /// Always increments. Debouncing is the recovery edge's own job (one per
+  /// shown loss that clears); gating this on `epoch != completed` would make
+  /// the first recovery read never happen and deadlock every later one.
+  void noteTransportRecoveredForDurableRead() {
+    _transportRecoveryDurableReadEpoch += 1;
+  }
+
+  /// The read that started at [epoch] succeeded and no newer edge superseded
+  /// it: the generation is converged and reads go back to the cheap path.
+  void noteTransportRecoveryDurableReadCompleted(int epoch) {
+    if (epoch <= _transportRecoveryDurableReadCompletedEpoch) return;
+    _transportRecoveryDurableReadCompletedEpoch = epoch;
   }
 
   bool get _viewerTurnConvergenceIsCurrent =>
@@ -9559,6 +9655,13 @@ class ActiveChat {
     if (gateway is TuiGatewayClient) {
       gateway.linkListenable.addListener(_onDesktopLinkChanged);
     }
+    final replayGateway = gateway is HermesDesktopReplaySnapshotGateway
+        ? gateway as HermesDesktopReplaySnapshotGateway
+        : null;
+    if (replayGateway != null) {
+      _truncatedReplayGateway = replayGateway;
+      replayGateway.addTruncatedReplayListener(_onTruncatedReplay);
+    }
   }
 
   /// PX5D: the socket that comes back by itself (PX5A redial) also clears a
@@ -10825,11 +10928,18 @@ class ActiveChat {
     if (expectedMessageCount != null && expectedMessageCount > 0) {
       _hardExpectedStoredMessageCount = expectedMessageCount;
     }
+    // A passive read that starts during one turn must never publish into a
+    // successor turn: the rows it fetched describe the previous turn's
+    // durable state and would pollute the new live projection. Turn starts
+    // (local submit or an externally observed turn) advance the epoch, so an
+    // in-flight read whose captured epoch no longer matches is dropped.
+    final turnEpochAtReadStart = _turnEpoch;
     bool viewerAuthorized() =>
         passiveOnly || (stillOwningVisible?.call() ?? true);
     bool loadStillAuthorized() =>
         !_disposed &&
         loadEpoch == _messageLoadEpoch &&
+        turnEpochAtReadStart == _turnEpoch &&
         viewerAuthorized() &&
         (stillCurrentRead?.call() ?? true);
     _ensureLocalAssistantErrorIdentities();
@@ -11833,6 +11943,16 @@ class ActiveChat {
       return;
     }
     if (!loadStillAuthorized()) return;
+    // Un turno de visor se reconcilia contra lo durable, pero una lectura pasiva
+    // que aterriza tarde no puede reemplazar la proyección viva (refresh pasivo
+    // tardío tras adjuntar el runtime): la fila viva y las filas ya visibles
+    // mandan y la página solo puede añadir filas.
+    if (passiveOnly &&
+        isStreaming &&
+        !clientOwnsLiveTurn &&
+        !_viewerLivePageKeepsVisibleRows(acceptedGraft.messages)) {
+      return;
+    }
     final verifyPotentialUserGenerationReplacement =
         _hasPotentialUserGenerationReplacement(normalized, acceptedGraft);
     _captureArtifactMaps(page.messages, logicalSessionId: logicalSessionId);
@@ -13581,6 +13701,32 @@ class ActiveChat {
       );
       _privateTerminalProjectionFences.add(fence);
     }
+  }
+
+  /// ¿La página durable conserva las filas durables que ya están en pantalla?
+  ///
+  /// Durante un turno de visor (`isStreaming && !clientOwnsLiveTurn`) la lectura
+  /// pasiva sí reconcilia contra lo durable, pero solo puede **añadir** filas
+  /// debajo de la proyección viva. Una página a la que le falta una fila durable
+  /// visible describe el estado durable anterior al runtime vivo (la lectura
+  /// salió antes de adjuntarlo y aterriza tarde): publicarla reemplazaría la
+  /// proyección viva, cambiaría la identidad de los elementos en pantalla y
+  /// saltaría el desplazamiento. Se descarta entera: falla cerrado.
+  bool _viewerLivePageKeepsVisibleRows(
+    List<Map<String, dynamic>> candidateNewestFirst,
+  ) {
+    final visible = <TranscriptMessageIdentity>[];
+    for (final message in _messages) {
+      if (!_hasDurableTranscriptIdentity(message)) continue;
+      final identity = _transcriptMessageIdentity(message);
+      if (identity != null) visible.add(identity);
+    }
+    if (visible.isEmpty) return true;
+    final candidate = _transcriptIdentities(candidateNewestFirst);
+    for (final identity in visible) {
+      if (!_identityCollectionContains(candidate, identity)) return false;
+    }
+    return true;
   }
 
   List<Map<String, dynamic>> _mergeRetainedLocalWithDurable(
@@ -19430,6 +19576,17 @@ class ActiveChat {
     return error.code == null && error.method == 'turn.status';
   }
 
+  /// Only `method-not-found` proves this gateway cannot carry a
+  /// `client_turn_id`. Any other coded failure may arrive after the turn was
+  /// accepted (an internal error on the response path), so invalidating the
+  /// capability there would make the retry drop the id and open a second turn.
+  /// Ambiguous/transport failures prove nothing at all.
+  static bool _promptSubmitContradictsIdempotency(Object error) {
+    if (error is! TuiGatewayRpcError) return false;
+    if (error.failureKind != null) return false;
+    return error.code == -32601;
+  }
+
   /// Selecciona el canal oficial de Desktop cuando está disponible. El fallback
   /// REST conserva compatibilidad con instalaciones que solo publican 8642.
   Future<bool> _startRemoteAgentTurn(
@@ -20434,10 +20591,15 @@ class ActiveChat {
       }
       final rejectedBeforeAcceptance =
           activeChatPromptWasRejectedBeforeAcceptance(error);
-      if (idempotentSubmission && !rejectedBeforeAcceptance) {
-        // Anunciada pero incompatible (method-not-found, eco/payload inválido o
-        // timeout): se invalida durante esta generación. No hay fallback porque
-        // el servidor pudo haber aceptado el turno.
+      if (idempotentSubmission &&
+          !rejectedBeforeAcceptance &&
+          _promptSubmitContradictsIdempotency(error)) {
+        // Only a CODED refusal proves this gateway cannot carry a client turn
+        // id (method-not-found, invalid params). An ambiguous failure — a lost
+        // ACK, a timeout, a transport failureKind — proves nothing about the
+        // capability, and invalidating it made the retry drop the id: the
+        // server then opened a second turn and the person saw the same
+        // message twice.
         _turnIdempotencyInvalid = true;
       }
       if (rejectedBeforeAcceptance) {
@@ -20933,6 +21095,281 @@ class ActiveChat {
         }
       }
     }
+  }
+
+  /// Task 3: the socket proved it cannot reconstruct a runtime's gap (ring
+  /// truncated / other epoch / hole) and the stream stays quarantined. A viewer
+  /// that watches a running turn reads the authoritative `session.resume`
+  /// snapshot instead and, only when that snapshot applies COMPLETELY, adopts
+  /// its `last_sequence` cut so live frames dispatch again.
+  ///
+  /// Nothing is done for a turn this client owns (its recovery loop already
+  /// re-reads the snapshot and mints a proof) or for a chat that is not
+  /// watching a running turn.
+  void _onTruncatedReplay(String runtimeSessionId, String replayEpoch) {
+    if (_disposed) return;
+    if (_desktopRuntimeSessionId != runtimeSessionId) return;
+    if (!_viewerTurnConvergenceIsCurrent) return;
+    unawaited(
+      _fetchViewerTurnSnapshotForTruncatedReplay(
+        runtimeSessionId,
+        replayEpoch,
+      ),
+    );
+  }
+
+  /// Plan r4 Task 3, steps 1-3: capture the binding, read the snapshot
+  /// read-only (never adopting the runtime, never minting a proof), check the
+  /// response's OWN identity/epoch, prove from the durable transcript that the
+  /// inflight still describes this viewer turn, apply it completely and only
+  /// then adopt the boundary.
+  Future<void> _fetchViewerTurnSnapshotForTruncatedReplay(
+    String runtimeSessionId,
+    String replayEpoch,
+  ) async {
+    final rawGateway = _desktopGateway;
+    if (rawGateway is! HermesDesktopReplaySnapshotGateway ||
+        rawGateway is! HermesDesktopRecoverySessionLifecycleGateway) {
+      return;
+    }
+    final replayGateway = rawGateway as HermesDesktopReplaySnapshotGateway;
+    final lifecycle =
+        rawGateway as HermesDesktopRecoverySessionLifecycleGateway;
+    if (!_viewerTurnConvergenceIsCurrent ||
+        _runTerminal ||
+        _desktopRuntimeSessionId != runtimeSessionId) {
+      return;
+    }
+    // The notification carries the epoch the socket was reading when the
+    // batch failed; a reconnect since then rotated the stream.
+    if (replayGateway.currentReplayEpoch != replayEpoch) return;
+    final durableId = _desktopStoredSessionId ?? serverSessionId;
+    if (durableId.isEmpty || durableId != durableId.trim()) return;
+    final _ViewerSnapshotBinding binding = (
+      connectionId: connection.id,
+      storedSessionId: durableId,
+      serverSessionId: serverSessionId,
+      profile: _storedSessionProfile,
+      runtimeSessionId: runtimeSessionId,
+      socketGeneration: _desktopTerminalTransportGeneration,
+      replayEpoch: replayEpoch,
+      turnEpoch: _turnEpoch,
+      viewerConvergenceEpoch: _viewerTurnConvergenceEpoch ?? -1,
+      viewerFreshBusyEpoch: _viewerFreshBusyEpoch,
+      recoveryRun: ++_viewerRecoveryRuns,
+    );
+    final DesktopSessionSnapshot snapshot;
+    try {
+      snapshot = await lifecycle.resumeExistingForRecovery(
+        durableId,
+        profile: binding.profile,
+      );
+    } catch (_) {
+      return;
+    }
+    if (_disposed ||
+        !_viewerSnapshotBindingStillCurrent(binding, rawGateway!)) {
+      return;
+    }
+    // r4 step 2: the response's own identity and epoch must equal what the
+    // request captured. Missing or mismatching ⇒ refuse both the application
+    // and the boundary (a restarted/rebound stream would order another
+    // stream's frames).
+    if (!_viewerSnapshotResponseBoundaryMatches(snapshot, binding)) return;
+    // Nothing is running any more: no snapshot to continue from.
+    if (!snapshot.running || snapshot.inflight == null) return;
+    final baseline = snapshot.lastSequence!;
+    if (!await _durableTranscriptKeepsViewerTurnOpen(snapshot)) return;
+    if (!_applyViewerTurnSnapshotWithBoundary(snapshot, binding)) return;
+    // r4: the boundary moves only after the snapshot applied completely.
+    replayGateway.adoptViewerSnapshotBoundary(
+      runtimeSessionId: runtimeSessionId,
+      baseline: baseline,
+      replayEpoch: binding.replayEpoch,
+    );
+  }
+
+  bool _viewerSnapshotBindingStillCurrent(
+    _ViewerSnapshotBinding binding,
+    HermesDesktopGateway gateway,
+  ) {
+    if (_disposed || !identical(gateway, _desktopGateway)) return false;
+    if (!_viewerTurnConvergenceIsCurrent || _runTerminal) return false;
+    if (binding.connectionId != connection.id) return false;
+    if (binding.serverSessionId != serverSessionId) return false;
+    if (binding.storedSessionId != (_desktopStoredSessionId ?? serverSessionId)) {
+      return false;
+    }
+    if (binding.profile != _storedSessionProfile) return false;
+    if (binding.runtimeSessionId != _desktopRuntimeSessionId) return false;
+    if (binding.socketGeneration != _desktopTerminalTransportGeneration) {
+      return false;
+    }
+    if (binding.turnEpoch != _turnEpoch) return false;
+    if (binding.viewerConvergenceEpoch != _viewerTurnConvergenceEpoch) {
+      return false;
+    }
+    if (binding.viewerFreshBusyEpoch != _viewerFreshBusyEpoch) return false;
+    if (binding.recoveryRun != _viewerRecoveryRuns) return false;
+    if (gateway is! HermesDesktopReplaySnapshotGateway) return false;
+    return (gateway as HermesDesktopReplaySnapshotGateway).currentReplayEpoch ==
+        binding.replayEpoch;
+  }
+
+  /// Only a response that carries the same runtime, the same durable session
+  /// and the same replay epoch the request captured may be applied. A missing
+  /// field is a refusal, never a degraded application.
+  bool _viewerSnapshotResponseBoundaryMatches(
+    DesktopSessionSnapshot snapshot,
+    _ViewerSnapshotBinding binding,
+  ) {
+    final epoch = snapshot.replayEpoch;
+    final baseline = snapshot.lastSequence;
+    if (epoch == null || epoch.isEmpty || epoch != binding.replayEpoch) {
+      return false;
+    }
+    if (baseline == null || baseline <= 0) return false;
+    // An implicitly created / aliased durable identity cannot be compared
+    // safely: the response would look equal to a different session.
+    if (snapshot.created) return false;
+    if (!snapshot.storedSessionIdentityExplicit) return false;
+    if (!snapshot.identityAliasesConsistent) return false;
+    if (snapshot.runtimeSessionId != binding.runtimeSessionId) return false;
+    if (snapshot.storedSessionId != binding.storedSessionId) return false;
+    return true;
+  }
+
+  /// Index of the viewer's live assistant row (newest-first): the streaming
+  /// row carries no durable identity and is neither cancelled nor interim.
+  int? _viewerLiveAssistantIndex(List<Map<String, dynamic>> newestFirst) {
+    for (var index = 0; index < newestFirst.length; index++) {
+      final message = newestFirst[index];
+      if (message['role'] != 'assistant') continue;
+      if (message['_cancelled'] == true) continue;
+      if (message['_interim'] == true) continue;
+      if (message['_desktopInterim'] == true) continue;
+      if (_hasDurableTranscriptIdentity(message)) continue;
+      return index;
+    }
+    return null;
+  }
+
+  /// r4 step 3: applies the snapshot to the viewer's live row — full public
+  /// text plus `display_kind`/`display_metadata` and the todo projection — and
+  /// reports whether the application was COMPLETE. A rejected application
+  /// leaves the live row as it was; the boundary is not adopted and the chat
+  /// converges from the durable transcript instead.
+  bool _applyViewerTurnSnapshotWithBoundary(
+    DesktopSessionSnapshot snapshot,
+    _ViewerSnapshotBinding binding,
+  ) {
+    final gateway = _desktopGateway;
+    if (gateway == null) return false;
+    if (!_viewerSnapshotBindingStillCurrent(binding, gateway)) return false;
+    if (!_viewerTurnConvergenceIsCurrent || _runTerminal) return false;
+    final inflight = snapshot.inflight;
+    if (!snapshot.running || inflight == null) return false;
+    final local = _messages;
+    final index = _viewerLiveAssistantIndex(local);
+    if (index == null) return false;
+    final live = local[index];
+    final liveText = (live['content']?.toString() ?? '').trimLeft();
+    final snapshotText = streamingPublicAssistantText(
+      inflight.assistant ?? '',
+    ).trimLeft();
+    // The reply streams forward, never backwards: a live row that is not a
+    // prefix of the snapshot text is not this inflight, so nothing may be
+    // claimed as covered (r4: refuse the whole snapshot, do not "keep
+    // streaming").
+    if (liveText.isNotEmpty && !snapshotText.startsWith(liveText)) return false;
+    final rebuilt = <String, dynamic>{...live, 'content': snapshotText};
+    final displayKind = inflight.displayKind;
+    if (displayKind != null) rebuilt['display_kind'] = displayKind;
+    final displayMetadata = inflight.displayMetadata;
+    if (displayMetadata != null) {
+      rebuilt['display_metadata'] = Map<String, dynamic>.unmodifiable(
+        displayMetadata,
+      );
+    }
+    final projected = local.toList(growable: true);
+    projected[index] = Map<String, dynamic>.unmodifiable(rebuilt);
+    try {
+      _hydrateAgentTasks(snapshot.todoState, running: snapshot.running);
+    } catch (_) {
+      return false;
+    }
+    // Live deltas keep accumulating into the stream buffer; it has to start
+    // from the snapshot's whole text, or the next delta would repaint the row
+    // from the short pre-cut prefix (text regression after the cut).
+    final rawAssistant = inflight.assistant ?? '';
+    if (rawAssistant.isNotEmpty) {
+      _assistantStream.clear();
+      _assistantStream.append(rawAssistant);
+      // Anything still queued for the next visual flush is already inside the
+      // snapshot text: flushing it would append the same suffix twice
+      // («...completo» + « mundo»).
+      _tokenBuffer.clear();
+    }
+    _messages = projected;
+    _emit(ActiveChatEvent.messagesHydrated);
+    return true;
+  }
+
+  /// Viewer twin of [_durableTranscriptKeepsOwnedTurnOpen]: Hermes' `inflight`
+  /// has no turn id, so two consecutive turns with the same prompt look
+  /// identical. A final assistant row already sitting after this prompt in the
+  /// durable transcript means the inflight describes the NEXT turn: applying
+  /// its text here would overwrite the closed turn's answer.
+  Future<bool> _durableTranscriptKeepsViewerTurnOpen(
+    DesktopSessionSnapshot snapshot,
+  ) async {
+    final local = _messages;
+    final index = _viewerLiveAssistantIndex(local);
+    if (index == null) return false;
+    Map<String, dynamic>? prompt;
+    for (var cursor = index + 1; cursor < local.length; cursor++) {
+      if (isRealUserTurn(local[cursor])) {
+        prompt = local[cursor];
+        break;
+      }
+    }
+    if (prompt == null) return false;
+    final promptText = _normalizedPromptText(prompt['content']);
+    if (promptText.isEmpty) return false;
+    final List<Map<String, dynamic>> transcript;
+    try {
+      transcript = await _loadRecoveryTranscriptShared(
+        serverSessionId,
+        _storedSessionProfile,
+      );
+    } catch (_) {
+      return false;
+    }
+    var anchor = -1;
+    var ambiguous = false;
+    for (var cursor = transcript.length - 1; cursor >= 0; cursor--) {
+      final row = transcript[cursor];
+      if (!isRealUserTurn(row)) continue;
+      if (_normalizedPromptText(row['content']) != promptText) continue;
+      if (anchor >= 0) {
+        // Two durable turns with the same prompt: the inflight may belong to
+        // either of them, and text alone is not turn identity. Refuse instead
+        // of picking the newest one (that is how turn A's closed answer gets
+        // overwritten by turn B's snapshot).
+        ambiguous = true;
+        break;
+      }
+      anchor = cursor;
+    }
+    if (ambiguous || anchor < 0) return false;
+    for (var cursor = anchor + 1; cursor < transcript.length; cursor++) {
+      final row = transcript[cursor];
+      if (isRealUserTurn(row)) return false;
+      if (row['role'] == 'assistant' && _hasDurableTranscriptIdentity(row)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _finalizeColdOpenViewerAttachment(
@@ -22620,7 +23057,16 @@ class ActiveChat {
     final cached = _turnIdempotencySupported;
     if (cached != null) return cached;
     try {
-      final supported = await _turnIdempotencyCapability();
+      var supported = await _turnIdempotencyCapability();
+      if (!supported) {
+        // The stored matrix is built from REST probes that never ask the WS
+        // gateway, so `turn_idempotency` cannot arrive through it (the
+        // reconnect duplicate-submit bug lived exactly in that gap). Ask the
+        // live gateway before believing the stale `false`; a failure keeps
+        // the cache empty so the next recovery asks again.
+        supported = await (gateway as HermesDesktopIdempotentGateway)
+            .supportsTurnIdempotency();
+      }
       _turnIdempotencySupported = supported;
       return supported;
     } catch (_) {
@@ -27372,8 +27818,16 @@ class ActiveChat {
     _assistantNarration.reset();
     _assistantStream.clear();
     _runTerminal = false;
+    // An externally observed turn streams through the same live pipeline as
+    // an own one: without binding the desktop gateway here the runtime's
+    // `message.*`/`tool.*` frames are dropped at the gateway gate and the
+    // new live row never animates (idle snapshots leave the flag off).
+    if (_desktopRuntimeSessionId != null) _usingDesktopGateway = true;
     _streamingConfirmed =
         snapshot.inflight?.assistant?.trim().isNotEmpty == true;
+    state = _streamingConfirmed
+        ? ChatPipelineState.streaming
+        : ChatPipelineState.executing;
     _cancelling = false;
     _discardLateInterruptTerminal = false;
     final hasLiveSubagent =
@@ -30298,7 +30752,12 @@ class ActiveChat {
   }
 
   Future<bool> _reconcileAfterResumeOnce() async {
-    if (_disposed || isStreaming) return false;
+    // An own live turn keeps its authority (a durable read mid-stream would
+    // duplicate the prompt/reply pair); a viewer turn still reconciles.
+    if (_disposed ||
+        (isStreaming && !_viewerTurnConvergenceIsCurrent)) {
+      return false;
+    }
     final expectedUsers = _messages.where(isRealUserTurn).length;
     Map<String, dynamic>? latestVisibleUser;
     for (final message in _messages) {
@@ -30378,7 +30837,7 @@ class ActiveChat {
           sessionEpoch == _desktopSessionEpoch &&
           socketGeneration == _desktopTerminalTransportGeneration &&
           identical(producerChannel, _desktopTerminalProducerChannel) &&
-          !isStreaming;
+          (!isStreaming || _viewerTurnConvergenceIsCurrent);
       try {
         await loadMessages(
           profile: profile,
@@ -30726,6 +31185,11 @@ class ActiveChat {
     _tokenFlushTimer?.cancel();
     _terminalTimer?.cancel();
     _desktopEventSubscription?.cancel();
+    final truncatedGateway = _truncatedReplayGateway;
+    if (truncatedGateway != null) {
+      truncatedGateway.removeTruncatedReplayListener(_onTruncatedReplay);
+      _truncatedReplayGateway = null;
+    }
     final gateway = _desktopGateway;
     if (gateway is TuiGatewayClient) {
       gateway.linkListenable.removeListener(_onDesktopLinkChanged);
@@ -30748,6 +31212,61 @@ class ActiveChat {
     _liveTurnUsage.dispose();
     _changes.close();
   }
+
+  // ---------------------------------------------------------------------
+  // Task 3 (truncated replay → viewer snapshot) test seams.
+  //
+  // They only publish the state the production path reads and then call the
+  // real continuation; no production logic is duplicated here.
+  // ---------------------------------------------------------------------
+
+  /// Test-only state injection: publishes the viewer projection a truncated
+  /// replay continuation inspects (attached runtime, live assistant row whose
+  /// turn this client did not submit, and the viewer convergence epoch) without
+  /// running the transport attach flow.
+  @visibleForTesting
+  void debugSeedViewerTruncatedTurnForTesting({
+    required String runtimeSessionId,
+    required String storedSessionId,
+    required List<Map<String, dynamic>> messagesNewestFirst,
+  }) {
+    _desktopRuntimeSessionId = runtimeSessionId;
+    _desktopStoredSessionId = storedSessionId;
+    _usingDesktopGateway = true;
+    _messages = [
+      for (final row in messagesNewestFirst) Map<String, dynamic>.of(row),
+    ];
+    _turnEpoch += 1;
+    _viewerTurnConvergenceEpoch = _turnEpoch;
+    _viewerFreshBusyEpoch = null;
+    _turnSubmittedAtMs = null;
+    _activeTurnDelivery = null;
+    _runTerminal = false;
+    _streamingConfirmed = true;
+    state = ChatPipelineState.streaming;
+  }
+
+  /// Test-only entry that awaits the real continuation end to end (including
+  /// its durable-transcript proof), so assertions run after it settled.
+  @visibleForTesting
+  Future<void> debugNotifyTruncatedReplayAndWait(
+    String runtimeSessionId,
+    String replayEpoch,
+  ) => _fetchViewerTurnSnapshotForTruncatedReplay(
+    runtimeSessionId,
+    replayEpoch,
+  );
+
+  /// Test-only entry into the notification gate itself (synchronous guard).
+  @visibleForTesting
+  void debugNotifyTruncatedReplay(
+    String runtimeSessionId,
+    String replayEpoch,
+  ) => _onTruncatedReplay(runtimeSessionId, replayEpoch);
+
+  /// Test-only view of the streaming buffer a snapshot application seeds.
+  @visibleForTesting
+  String get debugAssistantStreamPublicText => _assistantStream.publicText;
 }
 
 final class _TerminalCommitGate {

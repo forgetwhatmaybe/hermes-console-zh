@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../../companion/render/companion_view.dart';
 import '../../companion/state/companion_controller.dart';
 import '../../companion/models/companion_mood.dart';
@@ -20,15 +21,33 @@ class CompanionPlaygroundScreen extends StatefulWidget {
 
 class _CompanionPlaygroundScreenState
     extends State<CompanionPlaygroundScreen> {
-  // Animaciones mostrables (etiqueta visible → mood que las dispara).
-  static const List<({String label, CompanionMood mood})> _moves = [
-    (label: 'Reposo', mood: CompanionMood.idle),
-    (label: 'Correr', mood: CompanionMood.thinking),
-    (label: 'Esperar', mood: CompanionMood.waiting),
-    (label: 'Saludar', mood: CompanionMood.success),
-    (label: 'Saltar', mood: CompanionMood.jump),
-    (label: 'Fallo', mood: CompanionMood.error),
+  // Animaciones mostrables (mood que la dispara; la etiqueta se localiza al
+  // pintar).
+  static const List<CompanionMood> _moves = [
+    CompanionMood.idle,
+    CompanionMood.thinking,
+    CompanionMood.waiting,
+    CompanionMood.success,
+    CompanionMood.jump,
+    CompanionMood.error,
   ];
+
+  static String _label(CompanionMood mood, Strings strings) {
+    switch (mood) {
+      case CompanionMood.idle:
+        return strings.petAnimIdle;
+      case CompanionMood.thinking:
+        return strings.petAnimRun;
+      case CompanionMood.waiting:
+        return strings.petAnimWait;
+      case CompanionMood.success:
+        return strings.petAnimGreet;
+      case CompanionMood.jump:
+        return strings.petAnimJump;
+      default:
+        return strings.petAnimFail;
+    }
+  }
 
   CompanionMood _mood = CompanionMood.idle;
 
@@ -45,8 +64,9 @@ class _CompanionPlaygroundScreenState
 
   @override
   Widget build(BuildContext context) {
+    final strings = Strings.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Animaciones')),
+      appBar: AppBar(title: Text(strings.petAnimationsTitle)),
       body: AnimatedBuilder(
         animation: widget.controller,
         builder: (context, _) {
@@ -69,11 +89,11 @@ class _CompanionPlaygroundScreenState
                   runSpacing: 10,
                   alignment: WrapAlignment.center,
                   children: [
-                    for (final m in _moves)
+                    for (final mood in _moves)
                       ChoiceChip(
-                        label: Text(m.label),
-                        selected: _mood == m.mood,
-                        onSelected: (_) => _play(m.mood),
+                        label: Text(_label(mood, strings)),
+                        selected: _mood == mood,
+                        onSelected: (_) => _play(mood),
                       ),
                   ],
                 ),

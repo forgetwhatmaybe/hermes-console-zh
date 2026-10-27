@@ -1,4 +1,5 @@
 
+import '../data/companion_error_codes.dart';
 import 'hatch_provider.dart';
 import 'package:flutter/foundation.dart';
 
@@ -40,8 +41,9 @@ class HermesHatchProvider implements HatchProvider {
       ok = false;
     }
     if (!ok) {
-      return const HatchAvailability.unavailable(
-          'El gateway conectado no expone generación de imágenes.');
+      return HatchAvailability.coded(
+        CompanionErrorCode.hatchGatewayUnsupported,
+      );
     }
     // Disponible, pero generar enviará el prompt al gateway → consentimiento.
     return const HatchAvailability(
@@ -56,10 +58,11 @@ class HermesHatchProvider implements HatchProvider {
     try {
       bytes = await call(request.prompt);
     } catch (e) {
-      throw HatchException('la generación en el gateway falló: $e');
+      debugPrint('[hatch] la generación en el gateway falló: $e');
+      throw HatchException.code(CompanionErrorCode.hatchGeneration);
     }
     if (bytes.isEmpty) {
-      throw HatchException('el gateway devolvió una imagen vacía');
+      throw HatchException.code(CompanionErrorCode.hatchEmptyImage);
     }
     return HatchResult(
       imageBytes: bytes,

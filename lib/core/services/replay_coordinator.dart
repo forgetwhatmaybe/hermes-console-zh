@@ -36,6 +36,9 @@ final class _RecoveryTransaction {
   int? turnGeneration;
   final List<SessionGatewayEvent> held = <SessionGatewayEvent>[];
   bool poisoned = false;
+  // Retired wire frames cannot be replayed on a new wire. A text-only viewer
+  // cut cannot cover that loss; a full-domain recovery proof still can.
+  bool requiresFullRecovery = false;
 
   _RecoveryTransaction({
     required this.runtime,
@@ -96,6 +99,15 @@ final class ReplayCoordinator {
   static const int maxRecoveryExceptions = 32;
   static const int maxHeldEvents = 64;
   static const int maxTotalHeldEvents = maxTrackedRuntimes * maxHeldEvents;
+
+  /// Frame types whose whole content a `session.resume` snapshot reproduces:
+  /// the assistant text. A dropped frame of any other type (tool steps,
+  /// activity, todo, reasoning, terminal) projects something the snapshot does
+  /// not carry, so a snapshot boundary may not claim it as covered.
+  static const Set<String> _snapshotCoveredReplayTypes = <String>{
+    'message.start',
+    'message.delta',
+  };
 
   final LinkedHashMap<String, int> _watermarks = LinkedHashMap<String, int>();
   final Set<String> _quarantine = <String>{};
@@ -267,7 +279,7 @@ final class ReplayCoordinator {
               transaction.generation != socketGeneration) ||
           (channel != null && !identical(transaction.channel, channel)) ||
           (replayEpoch != null && transaction.epoch != replayEpoch)) {
-        abandonTransaction(runtime);
+        abandonTransaction(runtime, poison: true);
         return ReplayLiveDisposition.quarantined;
       }
       for (final prior in transaction.held) {
@@ -275,12 +287,12 @@ final class ReplayCoordinator {
         if (ReplayBatchProof.sameEvent(prior, event)) {
           return ReplayLiveDisposition.ignored;
         }
-        abandonTransaction(runtime);
+        abandonTransaction(runtime, poison: true);
         return ReplayLiveDisposition.quarantined;
       }
       if (transaction.held.length >= maxHeldEvents ||
           _totalHeldEvents >= maxTotalHeldEvents) {
-        abandonTransaction(runtime);
+        abandonTransaction(runtime, poison: true);
         return ReplayLiveDisposition.quarantined;
       }
       transaction.held.add(event);
@@ -316,28 +328,33 @@ final class ReplayCoordinator {
       result: result,
       held: List<SessionGatewayEvent>.unmodifiable(transaction.held),
     );
-    _totalHeldEvents -= transaction.held.length;
-    transaction.held.clear();
-    transaction.closed = true;
-    _transactions.remove(runtime);
     // N10h-1: only a proven contiguous batch resumes the live stream (Hermes
     // Desktop flushReplayHold). Every other answer keeps the quarantine.
     if (decision is ReplayBatchCommit) {
+      transaction.closed = true;
+      _transactions.remove(runtime);
+      _totalHeldEvents -= transaction.held.length;
+      transaction.held.clear();
       _recordWatermark(runtime, decision.newWatermark);
     } else {
+      // Quarantine retains the live frames on their captured wire. Only a
+      // valid truncated proof may delegate their coverage to a viewer cut.
       quarantine(runtime);
+      if (decision is! ReplayBatchQuarantine ||
+          decision.reason != 'replay truncated') {
+        final recovery = _recoveryTransactionFor(runtime);
+        if (recovery != null) _poisonRecovery(recovery);
+      }
     }
     return decision;
   }
 
-  void abandonTransaction(String runtime) {
-    final transaction = _transactions.remove(runtime);
-    if (transaction != null) {
-      _totalHeldEvents -= transaction.held.length;
-      transaction.held.clear();
-      transaction.closed = true;
-    }
+  void abandonTransaction(String runtime, {bool poison = false}) {
     quarantine(runtime);
+    if (poison) {
+      final recovery = _recoveryTransactionFor(runtime);
+      if (recovery != null) _poisonRecovery(recovery);
+    }
   }
 
   void abandonAllTransactions() {
@@ -376,23 +393,33 @@ final class ReplayCoordinator {
           proof.socketGeneration == generation &&
           identical(proof.channelIdentity, channel),
     );
+    // First transfer any replay hold so retirement cannot bypass its loss
+    // marker. Repeated retirement of the old wire leaves the fresh marker.
+    for (final entry in _transactions.entries.toList()) {
+      final transaction = entry.value;
+      if (transaction.generation == generation &&
+          identical(transaction.channel, channel)) {
+        abandonTransaction(entry.key);
+      }
+    }
     for (final transaction in _recoveryTransactions.values.toList()) {
       if (transaction.socketGeneration == generation &&
           identical(transaction.channel, channel)) {
+        final lostProjection =
+            transaction.requiresFullRecovery ||
+            transaction.poisoned ||
+            transaction.held.isNotEmpty;
         _poisonRecovery(transaction);
         if (identical(
           _recoveryTransactions[transaction.runtime],
           transaction,
         )) {
           _recoveryTransactions.remove(transaction.runtime);
+          if (lostProjection && !_resourceOverflowed) {
+            _recoveryTransactionFor(transaction.runtime)?.requiresFullRecovery =
+                true;
+          }
         }
-      }
-    }
-    for (final entry in _transactions.entries.toList()) {
-      final transaction = entry.value;
-      if (transaction.generation == generation &&
-          identical(transaction.channel, channel)) {
-        abandonTransaction(entry.key);
       }
     }
   }
@@ -465,6 +492,9 @@ final class ReplayCoordinator {
     );
     _watermarks.remove(runtime);
     final replay = _transactions.remove(runtime);
+    final held = replay == null
+        ? const <SessionGatewayEvent>[]
+        : List<SessionGatewayEvent>.of(replay.held);
     if (replay != null) {
       _totalHeldEvents -= replay.held.length;
       replay.held.clear();
@@ -483,11 +513,35 @@ final class ReplayCoordinator {
     }
     if (_quarantineAll) {
       _recoveryExceptions.remove(runtime);
-      return;
+    } else {
+      _quarantine.add(runtime);
+      if (_quarantine.length > maxQuarantineEntries) {
+        _poisonAllForResourceOverflow();
+      }
     }
-    _quarantine.add(runtime);
-    if (_quarantine.length > maxQuarantineEntries) {
-      _poisonAllForResourceOverflow();
+    if (replay != null && !_resourceOverflowed) {
+      final recovery = _recoveryTransactionFor(
+        runtime,
+        socketGeneration: replay.generation,
+        channel: replay.channel,
+        replayEpoch: replay.epoch,
+      );
+      if (recovery != null &&
+          !recovery.bindWire(
+            generation: replay.generation,
+            channelIdentity: replay.channel,
+            epoch: replay.epoch,
+          )) {
+        _poisonRecovery(recovery);
+      }
+      for (final event in held) {
+        acceptLive(
+          event,
+          socketGeneration: replay.generation,
+          channel: replay.channel,
+          replayEpoch: replay.epoch,
+        );
+      }
     }
   }
 
@@ -533,6 +587,95 @@ final class ReplayCoordinator {
           List<SessionGatewayEvent>.unmodifiable(released);
     }
     _committedRecoveryAuthorities[runtime] = proof;
+    return true;
+  }
+
+  /// Resumes a quarantined runtime's live stream from an authoritative
+  /// snapshot/replay cut, for a turn this client only WATCHES (a viewer): it
+  /// never mints or commits a recovery proof, never takes over the runtime and
+  /// never touches ownership.
+  ///
+  /// The caller MUST have applied the snapshot completely before calling this
+  /// (r4): the boundary is only trusted because the snapshot content covers it.
+  /// Steps, identical in meaning to [commitRecovery]:
+  ///   (a) held text frames with `seq <= baseline` are dropped; other types
+  ///       refuse adoption because the viewer snapshot does not cover them;
+  ///   (b) held frames with `seq > baseline` must be contiguous from
+  ///       `baseline + 1`; a hole refuses the whole adoption and leaves the
+  ///       quarantine (and every held frame) in place for the durable path;
+  ///   (c) the watermark lands on `baseline` (or the last released frame) and
+  ///       the quarantine is lifted, so later live frames dispatch again
+  ///       through [acceptLive] — this is what "the stream continues after the
+  ///       snapshot" means.
+  bool adoptSnapshotBoundary({
+    required String runtime,
+    required int baseline,
+    required int socketGeneration,
+    required Object channel,
+    required String replayEpoch,
+  }) {
+    if (_resourceOverflowed || baseline <= 0) return false;
+    if (!isQuarantined(runtime)) return false;
+    // An open replay transaction still owns this runtime's ordering: let it
+    // answer instead of cutting under it.
+    if (_transactions.containsKey(runtime)) return false;
+    final transaction = _recoveryTransactionFor(
+      runtime,
+      socketGeneration: socketGeneration,
+      channel: channel,
+      replayEpoch: replayEpoch,
+    );
+    if (transaction == null ||
+        transaction.poisoned ||
+        transaction.requiresFullRecovery) {
+      return false;
+    }
+    if (!transaction.bindWire(
+      generation: socketGeneration,
+      channelIdentity: channel,
+      epoch: replayEpoch,
+    )) {
+      _poisonRecovery(transaction);
+      return false;
+    }
+    var expected = baseline + 1;
+    for (final event in transaction.held) {
+      final sequence = event.sequence;
+      if (sequence == null) return false;
+      if (sequence <= baseline) {
+        // The snapshot carries the assistant TEXT, not the tool/activity steps
+        // those frames projected: dropping a tool frame here would lose a
+        // running pill the cut never covered, so the whole adoption is
+        // refused and the durable transcript converges instead (r4 invariant:
+        // only what the snapshot fully covers may be discarded).
+        if (!_snapshotCoveredReplayTypes.contains(event.type)) return false;
+        continue;
+      }
+      if (sequence != expected) return false;
+      expected += 1;
+    }
+    final released = <SessionGatewayEvent>[
+      for (final event in transaction.held)
+        if (event.sequence! > baseline) event,
+    ];
+    _totalHeldEvents -= transaction.held.length;
+    transaction.held.clear();
+    _recoveryTransactions.remove(runtime);
+    _quarantine.remove(runtime);
+    if (_quarantineAll) {
+      _recoveryExceptions.add(runtime);
+      if (_recoveryExceptions.length > maxRecoveryExceptions) {
+        _recoveryExceptions.remove(_recoveryExceptions.first);
+      }
+    }
+    _recordWatermark(
+      runtime,
+      released.isEmpty ? baseline : released.last.sequence!,
+    );
+    if (released.isNotEmpty) {
+      _committedRecoveryEvents[runtime] =
+          List<SessionGatewayEvent>.unmodifiable(released);
+    }
     return true;
   }
 

@@ -41,172 +41,217 @@ String firstLinePlain(String? raw, {int max = 120}) {
   return '';
 }
 
-/// Bot Mode copy (en/es), resolved without BuildContext like [NotifL10n].
+/// Bot Mode copy (es/en/zh), resolved without BuildContext like [NotifL10n].
 extension BotNotificationCopy on NotifL10n {
-  String _t(String esText, String enText) => es ? esText : enText;
+  String _t(String esText, String enText, String zhText) => switch (lang) {
+    NotifLang.es => esText,
+    NotifLang.en => enText,
+    NotifLang.zh => zhText,
+  };
 
   String approvalNeedsOk(String? command, String? description) {
     final cmd = plainNotificationText(command, max: 90);
     if (cmd.isNotEmpty) {
-      return _t('¿Permitir «$cmd»?', 'Allow “$cmd”?');
+      return _t('¿Permitir «$cmd»?', 'Allow “$cmd”?', '允许「$cmd」？');
     }
     final what = plainNotificationText(description, max: 90);
     if (what.isNotEmpty) {
-      return _t('Pide permiso · $what', 'Asks permission · $what');
+      return _t(
+        'Pide permiso · $what',
+        'Asks permission · $what',
+        '请求许可 · $what',
+      );
     }
-    return _t('Pide permiso', 'Asks permission');
+    return _t('Pide permiso', 'Asks permission', '请求许可');
   }
 
   /// A question the agent stopped to ask, when its text cannot be shown.
-  String get asksYou => _t('Tiene una pregunta', 'Has a question');
+  String get asksYou =>
+      _t('Tiene una pregunta', 'Has a question', '有问题要问你');
 
-  String needsYou(String who) => _t('$who te necesita', '$who needs you');
-  String get newActivity => _t('Nueva actividad', 'New activity');
+  String needsYou(String who) =>
+      _t('$who te necesita', '$who needs you', '$who 需要你');
+  String get newActivity => _t('Nueva actividad', 'New activity', '新活动');
   String roundDone(List<String> replied) {
-    if (replied.isEmpty) return _t('Ronda terminada', 'Round done');
+    if (replied.isEmpty) return _t('Ronda terminada', 'Round done', '本轮结束');
     final names = _joinNames(replied);
     return replied.length == 1
         ? _t(
             'Ronda terminada · $names respondió',
             'Round done · $names replied',
+            '本轮结束 · $names 已回复',
           )
         : _t(
             'Ronda terminada · $names respondieron',
             'Round done · $names replied',
+            '本轮结束 · $names 已回复',
           );
   }
 
   String _joinNames(List<String> names) {
     final unique = names.toSet().toList();
     if (unique.length == 1) return unique.first;
-    final and = _t('y', 'and');
+    final and = _t('y', 'and', '和');
     if (unique.length == 2) return '${unique[0]} $and ${unique[1]}';
     final head = unique.take(2).join(', ');
     final rest = unique.length - 2;
-    return _t('$head y $rest más', '$head and $rest more');
+    return _t(
+      '$head y $rest más',
+      '$head and $rest more',
+      '$head 和另外 $rest 个',
+    );
   }
 
   String memberFailed(String who) =>
-      _t('$who no pudo terminar', '$who couldn’t finish');
+      _t('$who no pudo terminar', '$who couldn’t finish', '$who 未能完成');
   // Console has no room retry (the card only offers Dismiss), so this copy
   // must not promise one.
   String get roomBlocked => _t(
     'Falló una respuesta en la sala · ábrela para verla',
     'A reply failed in this room · open to see it',
+    '房间内有一条回复失败 · 打开查看',
   );
   String isWorking(String who) =>
-      _t('$who está trabajando…', '$who is working…');
+      _t('$who está trabajando…', '$who is working…', '$who 正在工作…');
   String isThinking(String who) =>
-      _t('$who está pensando…', '$who is thinking…');
-  String roundReplied(int done, int total) =>
-      _t('$done de $total respondieron', '$done of $total replied');
-  String get roomWorking => _t('La sala está trabajando…', 'Room is working…');
-  String get thinking => _t('Pensando…', 'Thinking…');
+      _t('$who está pensando…', '$who is thinking…', '$who 正在思考…');
+  String roundReplied(int done, int total) => _t(
+    '$done de $total respondieron',
+    '$done of $total replied',
+    '$total 个中已有 $done 个回复',
+  );
+  String get roomWorking =>
+      _t('La sala está trabajando…', 'Room is working…', '房间正在工作…');
+  String get thinking => _t('Pensando…', 'Thinking…', '正在思考…');
   String roundWorking(int round, int working, int total) => _t(
     'Ronda $round · $working de $total trabajando',
     'Round $round · $working of $total working',
+    '第 $round 轮 · $total 个中有 $working 个正在工作',
   );
   String botFinished(String bot, String firstLine) => firstLine.isEmpty
-      ? _t('$bot terminó', '$bot finished')
-      : _t('$bot terminó · $firstLine', '$bot finished · $firstLine');
-  String get you => _t('Tú', 'You');
+      ? _t('$bot terminó', '$bot finished', '$bot 已完成')
+      : _t(
+          '$bot terminó · $firstLine',
+          '$bot finished · $firstLine',
+          '$bot 已完成 · $firstLine',
+        );
+  String get you => _t('Tú', 'You', '你');
 
-  String get actApprove => _t('Permitir', 'Allow');
-  String get actDeny => _t('Rechazar', 'Deny');
-  String get actAlways => _t('Siempre', 'Always');
-  String get actReply => _t('Responder', 'Reply');
-  String get actStop => _t('Detener', 'Stop');
-  String get actStopAll => _t('Detener todo', 'Stop all');
+  String get actApprove => _t('Permitir', 'Allow', '允许');
+  String get actDeny => _t('Rechazar', 'Deny', '拒绝');
+  String get actAlways => _t('Siempre', 'Always', '始终');
+  String get actReply => _t('Responder', 'Reply', '回复');
+  String get actStop => _t('Detener', 'Stop', '停止');
+  String get actStopAll => _t('Detener todo', 'Stop all', '全部停止');
 
   /// Stop on a room's own Live Update: acts on that room only.
-  String get actStopRoom => _t('Detener sala', 'Stop room');
-  String replyHint(String who) => _t('Responder a $who', 'Reply to $who');
+  String get actStopRoom => _t('Detener sala', 'Stop room', '停止房间');
+  String replyHint(String who) =>
+      _t('Responder a $who', 'Reply to $who', '回复 $who');
 
-  String get confirmApproved => _t('Permitido', 'Allowed');
-  String get confirmDenied => _t('Rechazado', 'Denied');
-  String get confirmStopping => _t('Deteniendo…', 'Stopping…');
-  String get confirmRetrying => _t('Reintentando…', 'Retrying…');
-  String get actRetry => _t('Reintentar', 'Retry');
-  String get confirmSent => _t('Enviado', 'Sent');
+  String get confirmApproved => _t('Permitido', 'Allowed', '已允许');
+  String get confirmDenied => _t('Rechazado', 'Denied', '已拒绝');
+  String get confirmStopping => _t('Deteniendo…', 'Stopping…', '正在停止…');
+  String get confirmRetrying => _t('Reintentando…', 'Retrying…', '正在重试…');
+  String get actRetry => _t('Reintentar', 'Retry', '重试');
+  String get confirmSent => _t('Enviado', 'Sent', '已发送');
 
   /// On an automation row: no more notices of that job or task. Its switch
   /// in the job / task screen turns them back on.
-  String get actMute => _t('Silenciar', 'Mute');
-  String get confirmMuted => _t('Silenciada', 'Muted');
+  String get actMute => _t('Silenciar', 'Mute', '静音');
+  String get confirmMuted => _t('Silenciada', 'Muted', '已静音');
 
   /// Where a goal's row comes from.
-  String get senderGoals => _t('Objetivos', 'Goals');
+  String get senderGoals => _t('Objetivos', 'Goals', '目标');
 
   /// State of a standing goal, said under the goal's own text.
   String goalHead(String status) => switch (status) {
-    'done' => _t('Cumplido', 'Reached'),
-    'paused' => _t('En pausa', 'Paused'),
-    'waiting' => _t('En espera', 'Waiting'),
-    _ => _t('Bloqueado', 'Blocked'),
+    'done' => _t('Cumplido', 'Reached', '已达成'),
+    'paused' => _t('En pausa', 'Paused', '已暂停'),
+    'waiting' => _t('En espera', 'Waiting', '等待中'),
+    _ => _t('Bloqueado', 'Blocked', '受阻'),
   };
   String get confirmAlreadyAnswered =>
-      _t('Ya estaba respondido', 'Already answered');
+      _t('Ya estaba respondido', 'Already answered', '已回答过');
 
   /// Stop on the live row of a chat turn, and its answer when the turn had
   /// already ended.
-  String get actStopTurn => _t('Parar', 'Stop');
+  String get actStopTurn => _t('Parar', 'Stop', '停止');
   String get confirmAlreadyFinished =>
-      _t('Ya había terminado', 'Already finished');
+      _t('Ya había terminado', 'Already finished', '早已结束');
 
   /// On a chat's finished reply: the card goes and the chat stops showing
   /// as unread.
-  String get actMarkRead => _t('Marcar leído', 'Mark read');
+  String get actMarkRead => _t('Marcar leído', 'Mark read', '标记为已读');
 
   /// State of a chat's result, next to the app name on its card.
-  String get resultDone => _t('Listo', 'Complete');
+  String get resultDone => _t('Listo', 'Complete', '完成');
 
   /// The line of a chat turn that failed. The reason stays in the chat.
-  String get resultFailedLine => _t('No pudo terminar', 'Couldn’t finish');
+  String get resultFailedLine =>
+      _t('No pudo terminar', 'Couldn’t finish', '未能完成');
 
   /// An approval that left the pending list: answered here, on another
   /// device, or withdrawn by a stop. The watcher cannot tell which.
   String get confirmNoLongerPending =>
-      _t('Ya no está pendiente', 'No longer pending');
-  String get confirmFailed =>
-      _t('No se pudo enviar · abre Hermes', 'Couldn’t send · open Hermes');
+      _t('Ya no está pendiente', 'No longer pending', '已不再待处理');
+  String get confirmFailed => _t(
+    'No se pudo enviar · abre Hermes',
+    'Couldn’t send · open Hermes',
+    '无法发送 · 打开 Hermes',
+  );
 
   /// A reply that could not be delivered; the text waits in the composer.
   String get confirmReplyFailed => _t(
     'No se pudo enviar · abre para reintentar',
     'Couldn’t send · open to retry',
+    '无法发送 · 打开重试',
   );
 
   /// The server may have accepted the message but did not confirm it.
-  String get confirmMaybeSent =>
-      _t('Enviado · abre Hermes para verlo', 'Sent · open Hermes to check');
+  String get confirmMaybeSent => _t(
+    'Enviado · abre Hermes para verlo',
+    'Sent · open Hermes to check',
+    '已发送 · 打开 Hermes 查看',
+  );
 
   /// Lock-screen / hidden-content Live Update copy.
-  String get liveWorkingPublic => _t('Trabajando…', 'Working…');
+  String get liveWorkingPublic => _t('Trabajando…', 'Working…', '正在工作…');
 
   // ── Widgets / multi-room ────────────────────────────────────────────────
-  String stepReplied(String who) => _t('$who respondió', '$who replied');
-  String stepWorking(String who) => _t('$who trabajando…', '$who working…');
-  String get working => _t('Trabajando…', 'Working…');
+  String stepReplied(String who) =>
+      _t('$who respondió', '$who replied', '$who 已回复');
+  String stepWorking(String who) =>
+      _t('$who trabajando…', '$who working…', '$who 正在处理…');
+  String get working => _t('Trabajando…', 'Working…', '正在工作…');
 
   /// Group summary suffix: "Atlas · 3 avisos".
-  String get alertsLabel => _t('avisos', 'alerts');
+  String get alertsLabel => _t('avisos', 'alerts', '条提醒');
 
   String routineDone(String routine, String line) => line.isEmpty
-      ? _t('Terminó «$routine»', 'Finished “$routine”')
-      : _t('Terminó «$routine» · $line', 'Finished “$routine” · $line');
-  String routineFailed(String routine) =>
-      _t('No pudo terminar «$routine»', 'Couldn’t finish “$routine”');
+      ? _t('Terminó «$routine»', 'Finished “$routine”', '「$routine」已完成')
+      : _t(
+          'Terminó «$routine» · $line',
+          'Finished “$routine” · $line',
+          '「$routine」已完成 · $line',
+        );
+  String routineFailed(String routine) => _t(
+    'No pudo terminar «$routine»',
+    'Couldn’t finish “$routine”',
+    '「$routine」未能完成',
+  );
 
   // Generic Hermes cards (cron / kanban / runs / chats without a Bot).
-  String get actViewResult => _t('Ver resultado', 'View result');
-  String get actViewReason => _t('Ver motivo', 'See why');
-  String get actOpenTask => _t('Abrir tarea', 'Open task');
+  String get actViewResult => _t('Ver resultado', 'View result', '查看结果');
+  String get actViewReason => _t('Ver motivo', 'See why', '查看原因');
+  String get actOpenTask => _t('Abrir tarea', 'Open task', '打开任务');
 
   /// Sender of task-board cards (neutral ">_" face).
-  String get senderTasks => _t('Tareas', 'Tasks');
+  String get senderTasks => _t('Tareas', 'Tasks', '任务');
 
   /// Sender of scheduled-job cards (neutral ">_" face).
-  String get senderScheduled => _t('Tareas programadas', 'Scheduled tasks');
+  String get senderScheduled =>
+      _t('Tareas programadas', 'Scheduled tasks', '定时任务');
 
   /// State of a board task, said under the task's own title (the name is
   /// never repeated). [eventKinds] are the events read with the status and
@@ -218,72 +263,87 @@ extension BotNotificationCopy on NotifL10n {
   }) {
     if (retry != null) {
       return retry == 'crashed'
-          ? _t('Falló; se va a reintentar', 'Failed; it will be retried')
+          ? _t(
+              'Falló; se va a reintentar',
+              'Failed; it will be retried',
+              '失败；将自动重试',
+            )
           : _t(
               'Tardó demasiado; se va a reintentar',
               'Took too long; it will be retried',
+              '耗时过长；将自动重试',
             );
     }
     return switch (status) {
-      'done' => _t('Terminada', 'Done'),
+      'done' => _t('Terminada', 'Done', '已完成'),
       'blocked' when eventKinds.contains('gave_up') => _t(
         'Detenida',
         'Stopped',
+        '已停止',
       ),
-      'blocked' => _t('Bloqueada', 'Blocked'),
+      'blocked' => _t('Bloqueada', 'Blocked', '受阻'),
       'triage' when eventKinds.contains('block_loop_detected') => _t(
         'Necesita que decidas',
         'Needs your decision',
+        '需要你决定',
       ),
-      'triage' => _t('Te necesita', 'Needs you'),
-      _ => _t('Actualizada', 'Updated'),
+      'triage' => _t('Te necesita', 'Needs you', '需要你'),
+      _ => _t('Actualizada', 'Updated', '已更新'),
     };
   }
 
   /// State of a scheduled job's run, said under the job's own name.
   String cronHead(bool ok) =>
-      ok ? _t('Terminó', 'Finished') : _t('Falló', 'Failed');
+      ok ? _t('Terminó', 'Finished', '已完成') : _t('Falló', 'Failed', '失败');
 
   // Lock-screen lines: the state, never names, commands or messages.
-  String get publicDone => _t('Terminó', 'Finished');
-  String get publicFailed => _t('No pudo terminar', 'Couldn’t finish');
-  String get publicNeedsYou => _t('Te necesita', 'Needs you');
+  String get publicDone => _t('Terminó', 'Finished', '已完成');
+  String get publicFailed => _t('No pudo terminar', 'Couldn’t finish', '未能完成');
+  String get publicNeedsYou => _t('Te necesita', 'Needs you', '需要你');
 
   /// Ongoing summary when more rooms work than Live Updates are shown.
-  String roomsWorking(int n) => _t('$n salas trabajando', '$n rooms working');
+  String roomsWorking(int n) =>
+      _t('$n salas trabajando', '$n rooms working', '$n 个房间正在工作');
 
   // ── Room Live Update polish (1.2.14) ────────────────────────────────────
   /// Stops the room's current round (same call as the room's Stop).
-  String get actStopRound => _t('Parar ronda', 'Stop round');
+  String get actStopRound => _t('Parar ronda', 'Stop round', '停止本轮');
 
   /// Opens that room.
-  String get actOpenRoom => _t('Abrir sala', 'Open room');
+  String get actOpenRoom => _t('Abrir sala', 'Open room', '打开房间');
 
   /// Expanded per-member row state ("Respondió · 00:41").
   String rowReplied(String? after) => after == null
-      ? _t('Respondió', 'Replied')
-      : _t('Respondió · $after', 'Replied · $after');
-  String get rowTyping => _t('Escribiendo…', 'Typing…');
-  String get rowWaiting => _t('En espera', 'Waiting');
-  String get rowNeedsYou => _t('Te necesita', 'Needs you');
-  String get rowFailed => _t('No pudo terminar', 'Couldn’t finish');
+      ? _t('Respondió', 'Replied', '已回复')
+      : _t('Respondió · $after', 'Replied · $after', '已回复 · $after');
+  String get rowTyping => _t('Escribiendo…', 'Typing…', '正在输入…');
+  String get rowWaiting => _t('En espera', 'Waiting', '等待中');
+  String get rowNeedsYou => _t('Te necesita', 'Needs you', '需要你');
+  String get rowFailed => _t('No pudo terminar', 'Couldn’t finish', '未能完成');
 
   /// Inline member state after the speaker ("Atlas respondió · 00:41").
   String inlineReplied(String who, String? after) => after == null
-      ? _t('$who respondió', '$who replied')
-      : _t('$who respondió · $after', '$who replied · $after');
-  String inlineTyping(String who) => _t('$who escribiendo…', '$who typing…');
-  String inlineWaiting(String who) => _t('$who en espera', '$who waiting');
-  String inlineNeedsYou(String who) => _t('$who te necesita', '$who needs you');
+      ? _t('$who respondió', '$who replied', '$who 已回复')
+      : _t(
+          '$who respondió · $after',
+          '$who replied · $after',
+          '$who 已回复 · $after',
+        );
+  String inlineTyping(String who) =>
+      _t('$who escribiendo…', '$who typing…', '$who 正在输入…');
+  String inlineWaiting(String who) =>
+      _t('$who en espera', '$who waiting', '$who 等待中');
+  String inlineNeedsYou(String who) =>
+      _t('$who te necesita', '$who needs you', '$who 需要你');
   String inlineFailed(String who) =>
-      _t('$who no pudo terminar', '$who couldn’t finish');
+      _t('$who no pudo terminar', '$who couldn’t finish', '$who 未能完成');
 
   /// Lock-safe state word of a quiet card in the grouped summary line.
   String summaryState(int accent) => switch (accent) {
-    RichAccent.done => _t('hecho', 'done'),
-    RichAccent.failed => _t('falló', 'failed'),
-    RichAccent.needsYou => _t('te necesita', 'needs you'),
-    _ => _t('nuevo', 'new'),
+    RichAccent.done => _t('hecho', 'done', '已完成'),
+    RichAccent.failed => _t('falló', 'failed', '失败'),
+    RichAccent.needsYou => _t('te necesita', 'needs you', '需要你'),
+    _ => _t('nuevo', 'new', '新'),
   };
 }
 

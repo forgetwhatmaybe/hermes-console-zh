@@ -35,6 +35,7 @@ import 'package:hermes_android/core/services/font_size_service.dart';
 import 'package:hermes_android/core/services/notifications/notification_service.dart';
 import 'package:hermes_android/core/services/secure_storage.dart';
 import 'package:hermes_android/core/services/sftp_transfer_service.dart';
+import 'package:hermes_android/core/services/session_reconciler.dart';
 import 'package:hermes_android/core/services/ssh_manager.dart';
 import 'package:hermes_android/core/services/ssh_session_service.dart';
 import 'package:hermes_android/core/services/tui_gateway_client.dart';
@@ -75,6 +76,10 @@ class _ReconcileGateway
       TuiGatewayEvent(type: type, sessionId: runtimeId, payload: payload),
     );
   }
+
+  /// The subscription the chat holds on [events] reports a socket-level loss
+  /// (ws 1006): the real reconnect cycle starts from this edge.
+  void emitError(Object error) => _events.addError(error);
 
   @override
   Stream<TuiGatewayEvent> get events => _events.stream;
@@ -545,4 +550,211 @@ void main() {
       await _disposeFixture(tester, fixture);
     },
   );
+
+  // ── T2 (plan r3): viewer 流式 durable 对账 + live 行保留 ──────────────────
+
+  group('T2 viewer streaming durable reconciliation', () {
+    /// Starts a turn this surface only observes (another surface submitted
+    /// it): `_pipeline` live placeholder + a running tool trace, no local
+    /// submit. This is the viewer state after a reconnect converged onto a
+    /// running remote turn.
+    void beginViewerTurn(_Fixture fixture) {
+      fixture.chat.beginExternallyObservedDesktopTurnForTesting(
+        DesktopSessionSnapshot(
+          runtimeSessionId: fixture.gateway.runtimeId,
+          storedSessionId: fixture.chat.serverSessionId,
+          created: false,
+          running: true,
+          status: 'working',
+        ),
+      );
+      fixture.gateway.emit(
+        'tool.start',
+        {'tool_id': 'call-viewer', 'name': 'terminal', 'context': ''},
+      );
+    }
+
+    testWidgets(
+      'T2-1: sessions.changed while a viewer streams still reads durable and '
+      'keeps the live placeholder row and its trace',
+      (tester) async {
+        var loads = 0;
+        final fixture = await _mountChat(
+          tester,
+          storedMessageLoader: (_, _) async {
+            loads += 1;
+            return const [
+              {
+                'message_id': 'viewer-remote-final',
+                'role': 'assistant',
+                'content': 'Remote reply committed mid-watch',
+              },
+              {
+                'message_id': 'viewer-remote-user',
+                'role': 'user',
+                'content': 'Remote prompt from another surface',
+              },
+            ];
+          },
+        );
+        beginViewerTurn(fixture);
+        await tester.pump();
+        expect(fixture.chat.isStreaming, isTrue);
+        expect(fixture.chat.clientOwnsLiveTurn, isFalse);
+        final liveRow = fixture.chat.messages.firstWhere(
+          (message) => message['_pipeline'] == true,
+        );
+        final traceBefore = liveRow[assistantActivityTraceKey];
+
+        fixture.gateway.emit('sessions.changed');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        expect(
+          loads,
+          greaterThan(0),
+          reason:
+              'a viewer (this surface did not submit the running turn) must '
+              'reconcile durable rows while the remote turn streams',
+        );
+        final messages = fixture.chat.messages;
+        expect(
+          messages.where((message) => message['_pipeline'] == true),
+          hasLength(1),
+          reason: 'the live placeholder row must survive the durable read',
+        );
+        final survivingLive = messages.firstWhere(
+          (message) => message['_pipeline'] == true,
+        );
+        expect(
+          survivingLive[assistantActivityTraceKey],
+          traceBefore,
+          reason: 'the live row keeps its activity trace',
+        );
+        final liveIndex = messages.indexOf(survivingLive);
+        expect(liveIndex, 0, reason: 'new durable rows land below the live row');
+        expect(
+          messages
+              .where((message) => message['content'] == 'Remote reply committed mid-watch'),
+          hasLength(1),
+          reason: 'no duplicate bubbles for the durable row',
+        );
+
+        await _disposeFixture(tester, fixture);
+      },
+    );
+
+    testWidgets(
+      'T2-2: an own submitted live turn stays excluded, and converges after done',
+      (tester) async {
+        var loads = 0;
+        final fixture = await _mountChat(
+          tester,
+          storedMessageLoader: (_, _) async {
+            loads += 1;
+            return const [
+              {'role': 'assistant', 'content': 'Should not appear mid-stream'},
+            ];
+          },
+        );
+        expect(
+          await fixture.chat.send(
+            fullText: 'own submitted turn',
+            model: 'hermes-agent',
+            history: const [],
+          ),
+          isTrue,
+        );
+        fixture.gateway.emit('message.start');
+        await tester.pump();
+        expect(fixture.chat.isStreaming, isTrue);
+        expect(fixture.chat.clientOwnsLiveTurn, isTrue);
+
+        final loadsWhileStreaming = loads;
+        fixture.gateway.emit('sessions.changed');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(
+          loads,
+          loadsWhileStreaming,
+          reason:
+              'a turn this client submitted keeps excluding passive durable '
+              'reads (they would paint a duplicate prompt/reply pair)',
+        );
+
+        fixture.gateway.emit(
+          'message.complete',
+          const {'text': 'Own final answer'},
+        );
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(
+          loads,
+          greaterThan(loadsWhileStreaming),
+          reason: 'once the turn settles, the deferred read must land',
+        );
+
+        await _disposeFixture(tester, fixture);
+      },
+    );
+
+    testWidgets(
+      'T2-3: a viewer read that outlives a turn epoch change is dropped',
+      (tester) async {
+        final readGate = Completer<List<Map<String, dynamic>>>();
+        var loads = 0;
+        final fixture = await _mountChat(
+          tester,
+          storedMessageLoader: (_, _) async {
+            loads += 1;
+            if (loads == 1) {
+              return const [
+                {
+                  'message_id': 'viewer-turn-a-final',
+                  'role': 'assistant',
+                  'content': 'Stale reply of turn A',
+                },
+              ];
+            }
+            return readGate.future;
+          },
+        );
+        beginViewerTurn(fixture);
+        await tester.pump();
+        fixture.gateway.emit('sessions.changed');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(loads, greaterThan(0));
+
+        // The read for the second tick is still in flight when the turn
+        // changes: a successor viewer turn begins (new epoch, new rows).
+        fixture.gateway.emit('sessions.changed');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(loads, greaterThan(1));
+        beginViewerTurn(fixture);
+        await tester.pump();
+        final messagesBeforeLanding = List<Map<String, dynamic>>.from(
+          fixture.chat.messages,
+        );
+        readGate.complete(const [
+          {
+            'message_id': 'viewer-turn-a-final',
+            'role': 'assistant',
+            'content': 'Stale reply of turn A',
+          },
+        ]);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        expect(
+          fixture.chat.messages.length,
+          messagesBeforeLanding.length,
+          reason: 'the stale read must not grow the new turn\'s projection',
+        );
+
+        await _disposeFixture(tester, fixture);
+      },
+    );
+  });
 }

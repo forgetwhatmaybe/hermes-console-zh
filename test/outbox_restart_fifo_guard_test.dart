@@ -90,6 +90,9 @@ class _RecoveryGateway
   }
 
   @override
+  Future<bool> supportsTurnIdempotency() async => false;
+
+@override
   Future<DesktopTurnStatus> getTurnStatus(
     String sessionId,
     String clientTurnId,

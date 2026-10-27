@@ -164,6 +164,14 @@ void main() {
       ReplayLiveDisposition.quarantined,
     );
 
+    expect(
+      coordinator.adoptSnapshotBoundary(
+        runtime: 'stale-runtime', baseline: 66, socketGeneration: 1,
+        channel: replayChannel, replayEpoch: 'epoch-a',
+      ),
+      isFalse,
+    );
+    coordinator.retireTransport(generation: 1, channel: replayChannel);
     final recoveryChannel = Object();
     final proof = coordinator.mintRecoveryProof(
       connectionId: 'connection-a',

@@ -156,6 +156,9 @@ class _SurfaceGateway
   }
 
   @override
+  Future<bool> supportsTurnIdempotency() async => false;
+
+@override
   Future<DesktopTurnStatus> getTurnStatus(
     String runtimeSessionId,
     String clientTurnId,

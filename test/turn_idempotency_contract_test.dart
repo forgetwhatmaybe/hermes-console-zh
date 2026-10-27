@@ -26,6 +26,7 @@ import 'package:hermes_android/core/services/tui_gateway_client.dart';
 import 'package:hermes_android/core/services/turn_outbox_store.dart';
 
 import 'support/in_memory_compression_restore_storage.dart';
+import 'support/mk1215_scripted_gateway_channel.dart';
 
 class _MemoryOutbox implements TurnOutboxPersistence {
   _MemoryOutbox({this.beforeSave});
@@ -236,6 +237,9 @@ class _ModernGateway extends _LegacyGateway
   }
 
   @override
+  Future<bool> supportsTurnIdempotency() async => false;
+
+@override
   Future<DesktopTurnStatus> getTurnStatus(
     String sessionId,
     String clientTurnId,
@@ -1244,6 +1248,92 @@ void main() {
     expect(status.known, isFalse);
     expect(status.state, isNull);
     expect(status.serverTurnId, isNull);
+  });
+
+  test('sonda viva: REST dice no pero el gateway declara turn_idempotency', () async {
+    // The stored REST matrix never sees the WS gateway; the live probe is the
+    // only path that can discover the capability. REST false must not mask it.
+    final gateway = _LiveProbeGateway(canned: const {'turn_idempotency': true});
+    expect(await gateway.supportsTurnIdempotency(), isTrue);
+  });
+
+  test('sonda viva: fallo transitorio NO se convierte en veredicto', () async {
+    // A timeout / lost connection is not evidence of absence. The probe must
+    // rethrow so ActiveChat leaves its cache empty and asks again later.
+    final gateway = _LiveProbeGateway(
+      cannedError: const TuiGatewayRpcError(
+        'gateway.capabilities',
+        'Connection lost before JSON-RPC response',
+        failureKind: TuiGatewayRpcFailureKind.connectionLost,
+      ),
+    );
+    await expectLater(
+      gateway.supportsTurnIdempotency(),
+      throwsA(isA<TuiGatewayRpcError>()),
+    );
+  });
+
+  test('sonda viva: rechazo definitivo de un gateway viejo es no-soportado', () async {
+    // -32601 method-not-found is the validated negative: the gateway is old,
+    // the capability stays unset, the caller keeps its fail-closed handling.
+    final gateway = _LiveProbeGateway(
+      cannedError: const TuiGatewayRpcError(
+        'gateway.capabilities',
+        'Method not found',
+        code: -32601,
+      ),
+    );
+    expect(await gateway.supportsTurnIdempotency(), isFalse);
+  });
+
+  test('sonda REAL del cliente: el gateway declara turn_idempotency', () async {
+    // The production probe (TuiGatewayClient.supportsTurnIdempotency) against
+    // a scripted channel answering gateway.capabilities with the field set.
+    final channel = ScriptedGatewayChannel(
+      respond: (frame) => frame['method'] == 'gateway.capabilities'
+          ? <String, dynamic>{'turn_idempotency': true}
+          : <String, dynamic>{},
+    );
+    final client = TuiGatewayClient(
+      SavedConnection(
+        id: 'probe-real',
+        label: 'probe real',
+        host: '127.0.0.1',
+        port: 8642,
+        apiKey: 'test-key-2026',
+        dashboardUrl: 'http://127.0.0.1:1',
+      ),
+      dashboard: _ProbeDashboard(),
+      heartbeatInterval: Duration.zero,
+      channelFactory: (_, _) => channel,
+    );
+    addTearDown(client.close);
+    await client.connect();
+    expect(await client.supportsTurnIdempotency(), isTrue);
+  });
+
+  test('sonda REAL del cliente: un gateway viejo sin el campo es no-soportado', () async {
+    final channel = ScriptedGatewayChannel(
+      respond: (frame) => frame['method'] == 'gateway.capabilities'
+          ? <String, dynamic>{'per_session_exclusive_submit': true}
+          : <String, dynamic>{},
+    );
+    final client = TuiGatewayClient(
+      SavedConnection(
+        id: 'probe-real-old',
+        label: 'probe real old',
+        host: '127.0.0.1',
+        port: 8642,
+        apiKey: 'test-key-2026',
+        dashboardUrl: 'http://127.0.0.1:1',
+      ),
+      dashboard: _ProbeDashboard(),
+      heartbeatInterval: Duration.zero,
+      channelFactory: (_, _) => channel,
+    );
+    addTearDown(client.close);
+    await client.connect();
+    expect(await client.supportsTurnIdempotency(), isFalse);
   });
 
   test('capability ausente o corrupta conserva contrato heredado', () async {
@@ -3224,6 +3314,58 @@ void main() {
     expect(fixture.delivery.current.state, PreparedTurnState.ambiguous);
   });
 
+  test('4095 interrupted submit retains identity on an explicit retry', () async {
+    const interrupted = TuiGatewayRpcError(
+      'prompt.submit',
+      'Turn was interrupted before execution; the message may have been saved.',
+      code: 4095,
+      data: {'reason': 'submit_interrupted'},
+    );
+    final gateway = _OwnershipGateway(
+      resumeRuntimeIds: ['runtime-old'],
+      idempotentSubmissionErrors: [interrupted, null],
+    );
+    final fixture = _fixture(gateway, capability: () async => true);
+    addTearDown(fixture.chat.dispose);
+    await fixture.chat.loadMessages();
+
+    expect(
+      await fixture.chat.send(
+        fullText: 'mensaje moderno',
+        model: 'hermes-agent',
+        history: const [],
+        delivery: fixture.delivery,
+      ),
+      isFalse,
+    );
+    expect(fixture.delivery.current.state, PreparedTurnState.ambiguous);
+    expect(fixture.delivery.current.clientTurnId, 'client-turn-1');
+    expect(fixture.chat.turnIdempotencyInvalid, isFalse);
+    expect(gateway.idempotentSubmissions, [
+      ('runtime-old', 'mensaje moderno', 'client-turn-1'),
+    ]);
+    expect(gateway.submissions, isEmpty);
+    expect(
+      fixture.store.writes.map((turn) => turn.state),
+      isNot(contains(PreparedTurnState.failedBeforeAcceptance)),
+    );
+
+    expect(
+      await fixture.chat.send(
+        fullText: 'mensaje moderno',
+        model: 'hermes-agent',
+        history: const [],
+        delivery: fixture.delivery,
+      ),
+      isTrue,
+    );
+    expect(gateway.idempotentSubmissions, [
+      ('runtime-old', 'mensaje moderno', 'client-turn-1'),
+      ('runtime-old', 'mensaje moderno', 'client-turn-1'),
+    ]);
+    expect(gateway.submissions, isEmpty);
+  });
+
   test('duplicate=true conserva una sola entrega aceptada', () async {
     final gateway = _ModernGateway()..duplicate = true;
     final fixture = _fixture(gateway, capability: () async => true);
@@ -3763,4 +3905,43 @@ void main() {
       },
     );
   });
+}
+
+/// Live capability probe double: answers with a canned map or throws the
+/// canned error, mimicking `TuiGatewayClient.supportsTurnIdempotency`.
+/// mk1215-style dashboard double: answers the WS ticket without network.
+class _ProbeDashboard extends DashboardClient {
+  _ProbeDashboard() : super(host: '127.0.0.1', port: 1, manualToken: 'unused');
+  @override
+  Future<DashboardWebSocketAuth> webSocketAuth() async =>
+      const DashboardWebSocketAuth(
+        queryName: 'ticket',
+        credential: 'probe-synthetic',
+      );
+}
+
+/// Mirrors `TuiGatewayClient.supportsTurnIdempotency`'s classification: only
+/// a validated refusal (-32601/-4000/-4001) is "unsupported"; everything else
+/// propagates so the caller leaves its cache empty.
+bool classifyProbeError(TuiGatewayRpcError error) =>
+    error.code == -32601 || error.code == 4000 || error.code == 4001;
+
+class _LiveProbeGateway implements HermesDesktopIdempotentGateway {
+  _LiveProbeGateway({this.canned, this.cannedError});
+
+  final Map<String, dynamic>? canned;
+  final TuiGatewayRpcError? cannedError;
+
+  @override
+  Future<bool> supportsTurnIdempotency() async {
+    final error = cannedError;
+    if (error != null) {
+      if (classifyProbeError(error)) return false;
+      throw error;
+    }
+    return canned?['turn_idempotency'] == true;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

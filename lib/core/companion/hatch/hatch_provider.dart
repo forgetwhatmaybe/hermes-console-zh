@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../data/companion_error_codes.dart';
+
 /// Abstracción "de dónde sale la imagen" para incubar (Hatch) una mascota.
 ///
 /// Desacopla la UI/servicio de la fuente de generación. En v1 hay dos
@@ -21,9 +23,12 @@ class HatchAvailability {
   /// Si el proveedor puede generar ahora mismo.
   final bool available;
 
-  /// Explicación legible para la UI cuando `!available` (p. ej. "El gateway no
-  /// expone generación de imágenes").
+  /// Motivo cuando `!available`: el `name` de [code] (código estable, sin texto
+  /// de interfaz) o el texto libre de un doble de test.
   final String reason;
+
+  /// Código estable del motivo; `null` en textos libres de test.
+  final CompanionErrorCode? code;
 
   /// `true` si generar enviará el prompt **fuera del dispositivo** (al gateway
   /// del usuario). La UI debe pedir consentimiento de privacidad antes.
@@ -33,9 +38,14 @@ class HatchAvailability {
     required this.available,
     this.reason = '',
     this.requiresPrivacyConsent = false,
+    this.code,
   });
 
   const HatchAvailability.unavailable(String reason) : this(available: false, reason: reason);
+
+  /// No disponible por un motivo propio del subsistema de mascotas.
+  factory HatchAvailability.coded(CompanionErrorCode code) =>
+      HatchAvailability(available: false, reason: code.name, code: code);
 }
 
 /// Petición de generación (prompt ya saneado por `prompt_safety`).
@@ -67,9 +77,18 @@ class HatchResult {
 
 /// Error de generación (la UI lo trata como error suave, sin dejar estado
 /// colgado ni artefactos a medias).
-class HatchException implements Exception {
+class HatchException implements CompanionCodedError {
+  /// Identificador estable del fallo, o texto libre de un doble de test.
   final String message;
-  HatchException(this.message);
+
+  @override
+  final CompanionErrorCode? code;
+
+  HatchException(this.message, {this.code});
+
+  /// Fallo propio del subsistema: el mensaje es el código estable, sin texto de
+  /// interfaz.
+  HatchException.code(CompanionErrorCode code) : this(code.name, code: code);
 
   @override
   String toString() => 'HatchException: $message';

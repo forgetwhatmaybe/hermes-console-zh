@@ -166,6 +166,35 @@ void main() {
         );
       }
     });
+
+    test('transcripciones chinas NO se descartan (CJK es texto válido)', () {
+      const real = [
+        '你好',
+        '什麼情況?',
+        '啥情況 你聽得到嗎',
+        '你好,这是手机语音链录测试。',
+        '请帮我查一下明天的天气',
+        '谢谢',
+        '混合中文 and English 123',
+      ];
+      for (final r in real) {
+        expect(
+          VoiceResponsePolicy.isLikelySttHallucination(r),
+          isFalse,
+          reason: 'NO debería marcar entrada china como alucinación: "$r"',
+        );
+      }
+      // Punctuation-only CJK noise is still noise: the check is about real
+      // letters (any script), not about letting everything through.
+      expect(VoiceResponsePolicy.isLikelySttHallucination('。。。。。'), isTrue);
+      expect(VoiceResponsePolicy.isLikelySttHallucination('，！？'), isTrue);
+      // Símbolos y emoji no son letras: ruido puro se descarta igual.
+      expect(VoiceResponsePolicy.isLikelySttHallucination('×÷'), isTrue);
+      expect(VoiceResponsePolicy.isLikelySttHallucination('🎵🎶'), isTrue);
+      expect(VoiceResponsePolicy.isLikelySttHallucination('・・・'), isTrue);
+      // Dígitos no ASCII cuentan como contenido (árabe-índico).
+      expect(VoiceResponsePolicy.isLikelySttHallucination('٣٢١'), isFalse);
+    });
   });
 
   group('VoiceService.speakOrFallback — FallbackTts', () {

@@ -5324,6 +5324,126 @@ void main() {
         expect(head.containsKey('_turn_usage_source'), isFalse);
       },
     );
+
+    group('usage keepalive (2026-10-25 页脚消失修复)', () {
+      test(
+        'ticks idénticos consecutivos mantienen la lectura viva',
+        () async {
+          final socket = DesktopChatSocket();
+          final chat = _socketChat(socket, messages: transcript);
+          await chat.send(fullText: 'hola', model: 'm', history: const []);
+          final tick = {
+            'usage': {'output': 100, 'total': 900, 'avg_tps': 12.0},
+          };
+          socket.emit('session.usage', tick);
+          await _waitFor(() => chat.liveTurnTokens == 100);
+          // Keepalive: el mismo payload repetido (ticker del servidor con
+          // contadores congelados durante una herramienta larga).
+          socket.emit('session.usage', tick);
+          socket.emit('session.usage', tick);
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          expect(chat.liveTurnTokens, 100);
+          expect(chat.liveTurnTps, 12.0);
+        },
+      );
+
+      test(
+        'un keepalive tras el settle no resucita la lectura',
+        () async {
+          final socket = DesktopChatSocket();
+          final chat = _socketChat(socket, messages: transcript);
+          final done = chat.changes.firstWhere((e) => e == ActiveChatEvent.done);
+          await chat.send(fullText: 'hola', model: 'm', history: const []);
+          socket.emit('session.usage', {
+            'usage': {'output': 100, 'total': 900, 'avg_tps': 12.0},
+          });
+          await _waitFor(() => chat.liveTurnTokens == 100);
+          socket.emit('message.complete', {
+            'text': 'hola mundo',
+            'status': 'complete',
+            'usage': {'output': 120, 'total': 920, 'avg_tps': 15.0},
+          });
+          await done.timeout(const Duration(seconds: 5));
+          await _waitFor(() => chat.liveTurnTokens == null);
+          // Keepalive idéntico al último tick: no debe revivir la lectura.
+          socket.emit('session.usage', {
+            'usage': {'output': 120, 'total': 920, 'avg_tps': 15.0},
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          expect(chat.liveTurnTokens, isNull);
+        },
+      );
+
+      test(
+        'reset de runtime: sin lectura hasta el primer tick del nuevo turno',
+        () async {
+          final socket = DesktopChatSocket();
+          final chat = _socketChat(socket, messages: transcript);
+          final done = chat.changes.firstWhere((e) => e == ActiveChatEvent.done);
+          await chat.send(fullText: 'hola', model: 'm', history: const []);
+          socket.emit('session.usage', {
+            'usage': {'output': 100, 'total': 900, 'avg_tps': 12.0},
+          });
+          await _waitFor(() => chat.liveTurnTokens == 100);
+          socket.emit('message.complete', {
+            'text': 'hola mundo',
+            'status': 'complete',
+            'usage': {'output': 120, 'total': 920, 'avg_tps': 15.0},
+          });
+          await done.timeout(const Duration(seconds: 5));
+          // Nuevo turno REAL (el usuario envía otra pregunta tras done): la
+          // segunda send abre un nuevo muestreo y la lectura parte de cero.
+          final done2 = chat.changes.firstWhere((e) => e == ActiveChatEvent.done);
+          await chat.send(fullText: 'otra', model: 'm', history: const []);
+          // El runtime informa el contador acumulado del backend (incluye la
+          // ronda anterior: 120) — message.start toma eso como base.
+          socket.emit('session.info', {
+            'usage': {'output': 120, 'total': 920},
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          socket.emit('message.start', {});
+          // Primer tick del nuevo turno: 180 - 120 = 60. Ningún residuo de la
+          // ronda anterior (que llegó a 120 exactos) contamina el cálculo.
+          socket.emit('session.usage', {
+            'usage': {'output': 180, 'total': 980, 'avg_tps': 20.0},
+          });
+          await _waitFor(() => chat.liveTurnTokens == 60);
+          expect(chat.liveTurnTps, 20.0);
+          socket.complete(1, 'otra respuesta');
+          await done2.timeout(const Duration(seconds: 5));
+        },
+      );
+
+      test(
+        'contador que baja durante una ronda se acota a cero, sin heredar el valor viejo',
+        () async {
+          final socket = DesktopChatSocket();
+          final chat = _socketChat(socket, messages: transcript);
+          await chat.send(fullText: 'hola', model: 'm', history: const []);
+          socket.emit('session.info', {
+            'usage': {'output': 1000, 'total': 1900},
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          socket.emit('message.start', {});
+          socket.emit('session.usage', {
+            'usage': {'output': 1500, 'total': 2400, 'avg_tps': 20.0},
+          });
+          await _waitFor(() => chat.liveTurnTokens == 500);
+          // El contador de sesión se resetea (rearranque del backend).
+          socket.emit('session.usage', {
+            'usage': {'output': 300, 'total': 1200, 'avg_tps': 10.0},
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          expect(chat.liveTurnTokens, 0);
+          // Vuelve a crecer desde el nuevo contador: 320 vs 300 → 20.
+          socket.emit('session.usage', {
+            'usage': {'output': 320, 'total': 1220, 'avg_tps': 10.0},
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          expect(chat.liveTurnTokens, 20);
+        },
+      );
+    });
   });
 }
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import '../data/companion_error_codes.dart';
 import '../data/companion_import_service.dart';
 import '../models/companion.dart';
 import 'hatch_provider.dart';
@@ -44,11 +45,11 @@ class HatchService {
 
     final dims = await _decodeDims(result.imageBytes);
     if (dims == null) {
-      throw HatchException('La imagen generada no es válida.');
+      throw HatchException.code(CompanionErrorCode.hatchImageInvalid);
     }
     final (w, h) = dims;
     if (w <= 0 || h <= 0) {
-      throw HatchException('La imagen generada tiene dimensiones inválidas.');
+      throw HatchException.code(CompanionErrorCode.hatchImageDimensions);
     }
 
     final slug = _uniqueSlug(_slugFromPrompt(clean), protectedSlugs, existingSlugs);

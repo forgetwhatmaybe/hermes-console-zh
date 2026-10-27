@@ -669,16 +669,12 @@ void main() {
       ),
     );
 
-    // En vivo (ct1215): la línea de estado y la herramienta en curso, en
-    // líneas sueltas; sin icono de estado, spinner ni shimmer.
+    // En vivo (ct1215): el estado del turno vive ahora en el mensaje que lo
+    // contiene (entre el cuerpo y el pie de tokens), no en la cabecera de la
+    // tarjeta. Aquí sólo quedan la herramienta en curso y sus líneas sueltas.
     await pump(active: true);
     await tester.pump();
-    final status = tester.widget<Text>(
-      find.byKey(const ValueKey('turn-status-text')),
-    );
-    expect(status.textSpan!.toPlainText(), 'Running tool');
-    expect(status.style!.color, colors.textSecondary);
-    expect(status.style!.fontSize, TurnType.status);
+    expect(find.byKey(const ValueKey('turn-status-text')), findsNothing);
     expect(find.text('Running · sleep', findRichText: true), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(

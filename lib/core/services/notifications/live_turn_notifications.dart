@@ -43,7 +43,7 @@ String liveToolLine(NotifL10n t, String tool, {bool isSkill = false}) {
   final name = tool.trim();
   if (isSkill) return name;
   return toolOrSkillStepTitle(
-    lookupStrings(Locale(t.es ? 'es' : 'en')),
+    lookupStrings(Locale(t.languageCode)),
     name,
     running: true,
   );
@@ -69,54 +69,60 @@ LiveTurnPhase liveTurnPhaseOf(
   _ => LiveTurnPhase.working,
 };
 
-/// Live row copy (es/en), resolved without BuildContext like [NotifL10n].
+/// Live row copy (es/en/zh), resolved without BuildContext like [NotifL10n].
 extension LiveTurnCopy on NotifL10n {
-  String _l(String esText, String enText) => es ? esText : enText;
+  String _l(String esText, String enText, String zhText) => switch (lang) {
+    NotifLang.es => esText,
+    NotifLang.en => enText,
+    NotifLang.zh => zhText,
+  };
 
   /// The activity line: one phase in plain words. A running tool whose name
   /// is known is worded by [liveToolLine] instead.
   String livePhase(LiveTurnPhase phase) => switch (phase) {
-    LiveTurnPhase.thinking => _l('Pensando', 'Thinking'),
-    LiveTurnPhase.responding => _l('Respondiendo', 'Responding'),
-    LiveTurnPhase.compacting => _l('Compactando', 'Compacting'),
-    LiveTurnPhase.waitingForYou => _l('Te espera', 'Waiting for you'),
+    LiveTurnPhase.thinking => _l('Pensando', 'Thinking', '正在思考'),
+    LiveTurnPhase.responding => _l('Respondiendo', 'Responding', '正在回复'),
+    LiveTurnPhase.compacting => _l('Compactando', 'Compacting', '正在压缩'),
+    LiveTurnPhase.waitingForYou => _l('Te espera', 'Waiting for you', '等你回复'),
     LiveTurnPhase.waitingForApproval => _l(
       'Espera tu permiso',
       'Waiting for approval',
+      '等待你的批准',
     ),
     LiveTurnPhase.needsClarification => _l(
       'Tiene una pregunta',
       'Needs clarification',
+      '有问题要问你',
     ),
     LiveTurnPhase.usingTool ||
-    LiveTurnPhase.working => _l('Trabajando', 'Working'),
+    LiveTurnPhase.working => _l('Trabajando', 'Working', '正在工作'),
   };
 
   /// The status-bar chip: at most seven characters, or Android cuts it.
   String liveChip(LiveTurnPhase phase) => switch (phase) {
-    LiveTurnPhase.thinking => _l('Piensa', 'Think'),
-    LiveTurnPhase.responding => _l('Escribe', 'Reply'),
-    LiveTurnPhase.compacting => _l('Resume', 'Compact'),
-    LiveTurnPhase.waitingForYou => _l('Te toca', 'You'),
-    LiveTurnPhase.waitingForApproval => _l('Permiso', 'Approve'),
-    LiveTurnPhase.needsClarification => _l('Duda', 'Ask'),
+    LiveTurnPhase.thinking => _l('Piensa', 'Think', '思考'),
+    LiveTurnPhase.responding => _l('Escribe', 'Reply', '回复'),
+    LiveTurnPhase.compacting => _l('Resume', 'Compact', '压缩'),
+    LiveTurnPhase.waitingForYou => _l('Te toca', 'You', '待回复'),
+    LiveTurnPhase.waitingForApproval => _l('Permiso', 'Approve', '待批准'),
+    LiveTurnPhase.needsClarification => _l('Duda', 'Ask', '待回答'),
     LiveTurnPhase.usingTool ||
-    LiveTurnPhase.working => _l('Trabaja', 'Working'),
+    LiveTurnPhase.working => _l('Trabaja', 'Working', '工作中'),
   };
 
   String liveTasks(int done, int total) =>
-      _l('Tareas $done de $total', 'Tasks $done of $total');
+      _l('Tareas $done de $total', 'Tasks $done of $total', '任务 $done/$total');
   String liveSubagents(int n) => n == 1
-      ? _l('1 subagente', '1 subagent')
-      : _l('$n subagentes', '$n subagents');
+      ? _l('1 subagente', '1 subagent', '1 个子代理')
+      : _l('$n subagentes', '$n subagents', '$n 个子代理');
   String liveTools(int n) => n == 1
-      ? _l('1 herramienta', '1 tool')
-      : _l('$n herramientas', '$n tools');
+      ? _l('1 herramienta', '1 tool', '1 个工具')
+      : _l('$n herramientas', '$n tools', '$n 个工具');
 
   /// Title when nothing may name the conversation (lock screen, hidden
   /// content, a turn only the background listener still watches).
   String liveWorkingTitle(String who) =>
-      _l('$who está trabajando', '$who is working');
+      _l('$who está trabajando', '$who is working', '$who 正在工作');
 }
 
 /// How far the rail is while no task list measures the turn (out of 100).
@@ -417,7 +423,12 @@ class LiveTurnNotifications {
     }
     final t = strings();
     final who = whoFor?.call(turn) ?? t.brand;
-    final signature = Object.hash(turn, who, row.hideSensitive, t.es);
+    final signature = Object.hash(
+      turn,
+      who,
+      row.hideSensitive,
+      t.languageCode,
+    );
     final now = _now();
     final last = row.postedAt;
     final unchanged = row.postedTag != null && row.signature == signature;

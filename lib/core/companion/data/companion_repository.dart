@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/profile_pet.dart';
 import '../models/companion.dart';
+import 'companion_error_codes.dart';
 import 'companion_import_service.dart';
 import 'companion_manifest_parser.dart';
 
@@ -116,7 +117,7 @@ class CompanionRepository {
   }) async {
     if (!_validRemoteSlug(info.slug) ||
         !_validRevision(info.spritesheetRevision)) {
-      throw CompanionImportException('identidad remota inválida');
+      throw CompanionImportException(CompanionErrorCode.remoteIdentity);
     }
     final cached = await loadCachedProfilePet(
       connectionId: connectionId,
@@ -126,9 +127,7 @@ class CompanionRepository {
     );
     if (cached != null) return cached;
     if (info.usesCachedSpritesheet || !info.hasSpritesheetPayload) {
-      throw CompanionImportException(
-        'el gateway omitió un atlas que no está en caché',
-      );
+      throw CompanionImportException(CompanionErrorCode.remoteAtlasNotCached);
     }
 
     final scopeRoot = await _profilePetScopeRoot(
@@ -137,7 +136,7 @@ class CompanionRepository {
       create: true,
     );
     if (scopeRoot == null) {
-      throw CompanionImportException('caché de mascotas remotas no disponible');
+      throw CompanionImportException(CompanionErrorCode.remoteCacheUnavailable);
     }
     final assetRoot = Directory(
       '${scopeRoot.path}/${_profilePetAssetKey(connectionId, profileId, info.slug, info.spritesheetRevision)}',
@@ -148,7 +147,7 @@ class CompanionRepository {
     );
     if (!materialized.isValid || !materialized.isRemote) {
       throw CompanionImportException(
-        'la mascota remota materializada no es válida',
+        CompanionErrorCode.remoteMaterializedInvalid,
       );
     }
     return materialized;
@@ -180,7 +179,7 @@ class CompanionRepository {
       );
       if (cached == null) {
         throw CompanionImportException(
-          'la revisión remota no superó la validación previa a promoción',
+          CompanionErrorCode.remoteRevisionUnvalidated,
         );
       }
       final scopeRoot = await _profilePetScopeRoot(
@@ -190,7 +189,7 @@ class CompanionRepository {
       );
       if (scopeRoot == null) {
         throw CompanionImportException(
-          'caché de mascotas remotas no disponible',
+          CompanionErrorCode.remoteCacheUnavailable,
         );
       }
       final index = await _readProfilePetIndex(scopeRoot);

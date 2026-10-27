@@ -19,6 +19,7 @@ import 'petdex_gallery_screen.dart';
 import '../../companion/render/spritesheet_renderer.dart';
 import '../../companion/state/companion_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/companion_error_localization.dart';
 import '../../widgets/hermes_app_bar.dart';
 import '../../widgets/mascot/float/mascot_prefs.dart';
 import '../../widgets/hermes_ui.dart';
@@ -590,7 +591,10 @@ class _MascotasBodyState extends State<_MascotasBody> {
       final pet = await controller.importFromZipBytes(bytes);
       messenger.notify(FeedbackKind.routine, str.petImportedSnack(pet.name));
     } on CompanionImportException catch (e) {
-      messenger.notify(FeedbackKind.error, str.petImportFailed(e.message));
+      messenger.notify(
+        FeedbackKind.error,
+        str.petImportFailed(localizedCompanionError(e, str)),
+      );
     } catch (e) {
       debugPrint('[mascotas] fallo inesperado al importar mascota: $e');
       messenger.notify(FeedbackKind.error, str.petImportFailedGeneric);
