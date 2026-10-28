@@ -100,14 +100,20 @@ carries an ack (`accepted`, `client_turn_id`, `server_turn_id`, `state`,
 client does, and that is correct).
 
 How that guarantee is produced matters if you read the server: it is **ordering**,
-not a self-contained check. `_lock_in_submit_turn` claims the key
-(`methods_prompt.py:1145`) and is called at `:1305`, before any ack is published
-(`:1380` compute dispatch, `:1462` inline result); a refused claim returns `5038`
-at `:1149` and never reaches an ack. The two defensive defaults —
-`entry.get("server_turn_id") or ""` (`:1019`) and `server_turn_id = None`
-(`:1434`) — therefore never land on a reachable path, and the `entry is None`
-branches guarding the two other `_client_turn_ack` callers (`:1218`, `:1327`)
-return errors before an ack.
+not a self-contained check. Two claim points feed the four ack sites:
+
+- `_lock_in_submit_turn` claims at `methods_prompt.py:1145` and is called at `:1305`.
+  A refused claim returns `5038` at `:1153` and never reaches an ack. Both acks it
+  precedes — `:1380` (compute dispatch) and `:1462` (inline result) — are therefore
+  after a successful claim.
+- The typed-stop path claims separately at `:1218` and returns `5038` at `:1221-1222`
+  when the key is absent, so its ack at `:1230` is equally covered. Note this ack runs
+  **before** `:1305`; the ordering claim is per-path, not one global claim ahead of
+  every ack.
+
+The two defensive defaults — `entry.get("server_turn_id") or ""` (`:1019`) and
+`server_turn_id = None` (`:1434`) — therefore never land on a reachable path: a claim
+either registered the key, or the request returned an error first.
 
 Do not restate this as "the helper may emit an empty id": it cannot, on any path
 that answers. If a future edit moves an ack before the claim, this becomes a real
