@@ -21183,7 +21183,11 @@ void main() {
         safeMessage,
       );
       expect(
-        find.textContaining('No se puede continuar en directo'),
+        // The bubble paints the localised string (errSessionNotOwned), not the
+        // service-layer raw: localizedChatError rewrites the raw before render.
+        // The stored `content` assertion above still pins the raw form, so this
+        // one only has to prove the rewrite reached the screen.
+        find.textContaining('Esta conversación pertenece a otro gateway'),
         findsOneWidget,
       );
       expect(find.textContaining('TuiGatewayRpcError'), findsNothing);
@@ -21223,7 +21227,8 @@ void main() {
         hasLength(1),
       );
       expect(
-        find.textContaining('No se puede continuar en directo'),
+        // Same rewrite as above: errSessionNotOwned is what reaches the screen.
+        find.textContaining('Esta conversación pertenece a otro gateway'),
         findsOneWidget,
       );
       expect(find.textContaining('TuiGatewayRpcError'), findsNothing);
