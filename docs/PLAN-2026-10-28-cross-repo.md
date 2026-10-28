@@ -17,8 +17,8 @@
 | P2-1 `chat_core.md` 行号 | **部分**：表格 9 个入口按 `977966f` 重核；正文仍是 10-26 快照，已在头部标注偏移不统一 |
 | P2-2 ack 必填字段 | **已修（文档）**：`duplicate` 确为 bool，`server_turn_id` 在可达路径上必非空——保证来自**顺序**（`:1305` 的 claim 先于 `:1380`/`:1462` 两处 ack；typed-stop 走 `:1218` 自己的 claim，`:1221` 守卫），`or ""` 与 `= None` 是不可达防御默认。已写进契约 |
 | AGENTS.md 两条规则（文档同步 / 改前审核） | **已完成**（两侧） |
-| P1-1 `user_row_id` 未消费 | **已修**：ack 解析 + 写进 `_desktopRowId`（只补空缺）；4 条解析测试 |
-| P1-2 排队消息转向/改写 | **RPC 层已修**：queued 返回 `admission_id`、新增 `steerQueuedPrompt`/`replaceQueuedPrompt`（4 条测试）。**UI 未接线**，用户仍无入口 |
+| P1-1 `user_row_id` 未消费 | **已修 + 已补测试**：ack 解析 + 写进 `_desktopRowId`（只补空缺）；4 条解析测试 + **4 条 service 级测试**（含变异检验：注释掉写入即变红） |
+| P1-2 排队消息转向/改写 | **RPC 层已修，UI 判定不做**：`_drainQueue` 受 `isStreaming` 守卫（26576），且逐条 drain，所以排队消息**大部分时间在本地队列**，已有 `steerQueuedTurnWithOutcome` 可操作；服务端 FIFO 只在「另一个 owner 占着 session」时才有内容（多设备场景），改队列在那种场景下 UX 本身不成立。RPC 留着备用 |
 | P1-3 `snapshot_required` / `session_authority` | **部分**：`snapshot_required` 已消费（缺键=不需要）；`session_authority` 判定不做——与 `truncated` 同源同值、今天接入零收益，且无消费点 |
 | P2-3 `_fetchReplay` 不回传 `replay_epoch` | **已修**：`session.events.since` 带上 epoch（authority 路径用它判 missing） |
 | P3-1 kanban 丢弃批次不回退游标 | **已修**：按 claim 段从新到旧 CAS 回退 + 300s hold 防 retry storm；6 条测试（含真实 sqlite 游标断言）。**已知隐患**：一条 claim 横跨 diagnostic/result 两半时，被拒那半仍会丢（退回必重复），日志会报 |
