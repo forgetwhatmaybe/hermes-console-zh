@@ -17,11 +17,11 @@
 | P2-1 `chat_core.md` 行号 | **部分**：表格 9 个入口按 `977966f` 重核；正文仍是 10-26 快照，已在头部标注偏移不统一 |
 | P2-2 ack 必填字段 | **已修（文档）**：`duplicate` 确为 bool，`server_turn_id` 在可达路径上必非空——保证来自**顺序**（`:1305` 的 claim 先于 `:1380`/`:1462` 两处 ack；typed-stop 走 `:1218` 自己的 claim，`:1221` 守卫），`or ""` 与 `= None` 是不可达防御默认。已写进契约 |
 | AGENTS.md 两条规则（文档同步 / 改前审核） | **已完成**（两侧） |
-| P1-1 `user_row_id` 未消费 | 未修（客户端代码） |
-| P1-2 排队消息转向/改写 | 未修（方法是否注册在 `/api/ws` 未核实） |
-| P1-3 `snapshot_required` / `session_authority` | 未修（客户端代码） |
-| P2-3 `_fetchReplay` 不回传 `replay_epoch` | 未修（客户端代码） |
-| P3-1 kanban 丢弃批次不回退游标 | 未修（服务端代码，需改 `_kb_poll_board` 契约） |
+| P1-1 `user_row_id` 未消费 | **已修**：ack 解析 + 写进 `_desktopRowId`（只补空缺）；4 条解析测试 |
+| P1-2 排队消息转向/改写 | **RPC 层已修**：queued 返回 `admission_id`、新增 `steerQueuedPrompt`/`replaceQueuedPrompt`（4 条测试）。**UI 未接线**，用户仍无入口 |
+| P1-3 `snapshot_required` / `session_authority` | **部分**：`snapshot_required` 已消费（缺键=不需要）；`session_authority` 判定不做——与 `truncated` 同源同值、今天接入零收益，且无消费点 |
+| P2-3 `_fetchReplay` 不回传 `replay_epoch` | **已修**：`session.events.since` 带上 epoch（authority 路径用它判 missing） |
+| P3-1 kanban 丢弃批次不回退游标 | **已修**：按 claim 段从新到旧 CAS 回退 + 300s hold 防 retry storm；6 条测试（含真实 sqlite 游标断言）。**已知隐患**：一条 claim 横跨 diagnostic/result 两半时，被拒那半仍会丢（退回必重复），日志会报 |
 | P3-2 错误码语义 | **已修（文档）**：实测 **110 个码 / 412 处**（grep 只数 `_err(rid, NNNN` 会漏常量、三元、dict 查表），同码多义（4001 有 4 种含义），故不建表；写清「4xxx 62 个 / 5xxx 48 个 + `data.reason` 有 30+ 个值（含大写与转发的 ledger refusal）」 |
 
 标题里的标记含义：`[已修]` 代码或文档已落地；`[已核实 · 未修]` 事实确认成立但没动代码；
@@ -64,7 +64,7 @@
 
 ## P1 — 契约缺口，影响功能
 
-### P1-1 客户端没用 `user_row_id`，改用全文 REST 扫描 `[已核实 · 未修]`
+### P1-1 客户端没用 `user_row_id`，改用全文 REST 扫描 `[已修]`
 
 - 服务端提供：`prompt_voice.py:81`（该次提交写入的 user row id）
 - 客户端现状：`tui_gateway_client.dart:8536-8573` `resolveDurableUserRowId` 拉全量历史按**文本匹配**
@@ -73,7 +73,7 @@
 
 **改**：优先用 ack 的 `user_row_id`；拿不到再回退到现有扫描。
 
-### P1-2 排队消息无法转向/改写 `[未核实 · 未修]`（方法是否注册在 `/api/ws` 未知）
+### P1-2 排队消息无法转向/改写 `[RPC 已修 · UI 未接线]`
 
 - 服务端提供：`admission_id` + `status: queued/steered/redirected`（`prompt_voice.py:84-95`）；
   方法 `prompt.steer_queued` / `prompt.replace_queued`（`canonical_sessions.py:332,341`）
@@ -84,7 +84,7 @@
 `registry.py` 的 `assert_complete` 只覆盖 258 个非 canonical 方法）。若未注册，此条降级为
 「服务端未暴露」，先补服务端注册再谈客户端。
 
-### P1-3 `snapshot_required` / `session_authority` 未消费 `[已核实 · 未修]`
+### P1-3 `snapshot_required` / `session_authority` 未消费 `[部分已修]`
 
 - `CanonicalEventsResult.snapshot_required`（`canonical_sessions.py:315`）：客户端只读
   `truncated`/`epoch`/`latest_seq`（`replay_batch_proof.dart:47-83`），靠推断代替显式信号
@@ -120,7 +120,7 @@
 
 **明确不做**：不把客户端的 `duplicate` 检查降级为可选。服务端保证总填，收紧是对的。
 
-### P2-3 `_fetchReplay` 不回传 `replay_epoch` `[已核实 · 未修]`
+### P2-3 `_fetchReplay` 不回传 `replay_epoch` `[已修]`
 
 客户端只发 `session_id`+`last_seen`（`2843-2846`）；换进程只能靠响应里的 `epoch` 事后发现。
 
@@ -131,7 +131,7 @@
 
 ## P3 — 服务端内部债务
 
-### P3-1 kanban 批次丢弃不回退游标 `[已核实 · 未修]`
+### P3-1 kanban 批次丢弃不回退游标 `[已修]`
 
 连续 3 次拒绝后 `pop("_kanban_pending")`（`session_notifications.py:596-605`），但事件已被
 `claim_unseen_events_for_sub` 原子推进（`kanban_db_notify.py:352-381`），这条 refusal 路径从不调用
