@@ -477,7 +477,12 @@ abstract class HermesDesktopClientSurfacePromptGateway {
     PromptClientSurface surface,
   );
 
-  Future<void> submitQueuedPromptWithSurface(
+  /// Returns the `admission_id` of a queued reply, or null when it has none.
+  ///
+  /// That id is the only handle a queued admission can later be steered or
+  /// replaced by, so it is surfaced instead of dropped. A missing id is a
+  /// normal reply (non-FIFO admissions carry none) and never fails the send.
+  Future<String?> submitQueuedPromptWithSurface(
     String runtimeSessionId,
     String text,
     PromptClientSurface surface,
@@ -1261,12 +1266,21 @@ class DesktopTurnAck {
   final DesktopTurnState state;
   final bool duplicate;
 
+  /// Durable transcript row the server wrote for this turn's user message.
+  ///
+  /// Absent on queued/steered/redirected deliveries and whenever persistence is
+  /// not yet proven (the server contract says so), so it is nullable and never
+  /// gates acceptance. When present it removes the need to guess the row by
+  /// matching message text against the history.
+  final int? userRowId;
+
   const DesktopTurnAck({
     required this.accepted,
     required this.clientTurnId,
     required this.serverTurnId,
     required this.state,
     required this.duplicate,
+    this.userRowId,
   });
 
   factory DesktopTurnAck.fromJson(
@@ -1303,12 +1317,16 @@ class DesktopTurnAck {
         'Hermes omitted the duplicate flag',
       );
     }
+    final rawUserRowId = json['user_row_id'];
     return DesktopTurnAck(
       accepted: true,
       clientTurnId: echoed,
       serverTurnId: serverTurnId,
       state: state,
       duplicate: duplicate,
+      // Wide in: a missing key is the normal case; a non-int is a server bug we
+      // ignore rather than fail the whole submit over.
+      userRowId: rawUserRowId is int && rawUserRowId > 0 ? rawUserRowId : null,
     );
   }
 }
@@ -1387,7 +1405,12 @@ abstract class HermesDesktopIdempotentGateway {
 }
 
 abstract class HermesDesktopQueuedPromptGateway {
-  Future<void> submitQueuedPrompt(String runtimeSessionId, String text);
+  /// Returns the `admission_id` of a queued reply, or null when it has none.
+  ///
+  /// A prompt the server took with `queued: true` sits in its FIFO; without the
+  /// id the owner can only wait for it. Null covers replies that carry no id,
+  /// which is not an error: the prompt is already admitted.
+  Future<String?> submitQueuedPrompt(String runtimeSessionId, String text);
 
   Future<DesktopTurnAck> submitQueuedPromptIdempotent(
     String runtimeSessionId,
@@ -2843,6 +2866,11 @@ class TuiGatewayClient
               <String, dynamic>{
                 'session_id': entry.key,
                 'last_seen': entry.value,
+                // The authority path compares this against its own event epoch
+                // and answers `missing: true` when it differs, so a client that
+                // omits it can never detect a server restart mid-reconnect. The
+                // legacy path reads only `last_seen` and ignores this key.
+                'replay_epoch': epoch,
               },
               timeout: const Duration(seconds: 10),
             );
@@ -8359,22 +8387,30 @@ class TuiGatewayClient
   }
 
   @override
-  Future<void> submitQueuedPrompt(String runtimeSessionId, String text) =>
+  Future<String?> submitQueuedPrompt(String runtimeSessionId, String text) =>
       _submitQueued(runtimeSessionId, text, const {});
 
   @override
-  Future<void> submitQueuedPromptWithSurface(
+  Future<String?> submitQueuedPromptWithSurface(
     String runtimeSessionId,
     String text,
     PromptClientSurface surface,
   ) => _submitQueued(runtimeSessionId, text, surface.toParams());
 
-  Future<void> _submitQueued(
+  /// Queues [text] behind the running turn and returns its admission handle.
+  ///
+  /// The `admission_id` a queued reply carries is the argument the later
+  /// `prompt.steer_queued` / `prompt.replace_queued` calls need, so it is
+  /// returned rather than discarded. Reading it wide on purpose: a non-FIFO
+  /// path legitimately answers without the key, and by then the prompt is
+  /// already admitted — throwing here would report a failure that did not
+  /// happen.
+  Future<String?> _submitQueued(
     String runtimeSessionId,
     String text,
     Map<String, dynamic> extraParams,
   ) async {
-    await _requestPromptSubmit(
+    final result = await _requestPromptSubmit(
       mergePromptSubmitParams({
         'session_id': runtimeSessionId,
         'text': text,
@@ -8382,6 +8418,8 @@ class TuiGatewayClient
       }, extraParams),
     );
     _markWatchdogRuntimeBusy(runtimeSessionId);
+    final admissionId = result['admission_id'];
+    return admissionId is String && admissionId.isNotEmpty ? admissionId : null;
   }
 
   @override
@@ -8701,6 +8739,53 @@ class TuiGatewayClient
       _ => DesktopRedirectDisposition.rejected,
     };
   }
+
+  /// Steers a still-queued admission into the running turn
+  /// (`prompt.steer_queued` -> `AdmissionStatus`).
+  ///
+  /// Plain `_requestConnected`, not `_requestPromptSubmit`: the server serves
+  /// this canonical method on the same socket dispatch but outside the
+  /// per-session exclusive submit channel, so demanding that submit capability
+  /// here would refuse gateways that answer this fine.
+  Future<Map<String, dynamic>> steerQueuedPrompt(
+    String runtimeSessionId,
+    String admissionId,
+  ) => _requestConnected(
+    'prompt.steer_queued',
+    <String, dynamic>{
+      'session_id': _validatedRuntimeId(
+        'prompt.steer_queued',
+        runtimeSessionId,
+      ),
+      'admission_id': admissionId,
+    },
+    timeout: const Duration(seconds: 10),
+  );
+
+  /// Replaces a still-queued admission with edited text, admitted as a new
+  /// admission at the FIFO tail (`prompt.replace_queued` -> `AdmissionStatus`).
+  ///
+  /// Same transport choice as [steerQueuedPrompt]: the server binds the write
+  /// to the replaced admission itself, so the exclusive submit channel adds
+  /// nothing but a capability a working gateway may not advertise.
+  Future<Map<String, dynamic>> replaceQueuedPrompt(
+    String runtimeSessionId, {
+    required String admissionId,
+    required String submissionId,
+    required String text,
+  }) => _requestConnected(
+    'prompt.replace_queued',
+    <String, dynamic>{
+      'session_id': _validatedRuntimeId(
+        'prompt.replace_queued',
+        runtimeSessionId,
+      ),
+      'admission_id': admissionId,
+      'submission_id': submissionId,
+      'text': text,
+    },
+    timeout: const Duration(seconds: 10),
+  );
 
   @override
   Future<void> interrupt(String runtimeSessionId) async {

@@ -614,12 +614,17 @@ class _NoLiveMutationVoiceGateway
     PromptClientSurface surface,
   ) => submitPromptWithSurface(runtimeSessionId, text, surface);
 
+  // Shares the plain submit path: no queued reply ever carries an admission id
+  // in this double, so it answers null.
   @override
-  Future<void> submitQueuedPromptWithSurface(
+  Future<String?> submitQueuedPromptWithSurface(
     String runtimeSessionId,
     String text,
     PromptClientSurface surface,
-  ) => submitPromptWithSurface(runtimeSessionId, text, surface);
+  ) async {
+    await submitPromptWithSurface(runtimeSessionId, text, surface);
+    return null;
+  }
 
   @override
   Future<DesktopTurnAck> submitPromptIdempotentWithSurface(

@@ -94,16 +94,26 @@ class _SurfaceGateway
     PromptClientSurface surface,
   ) async => _record('interrupted', text, surface);
 
+  // Records the send only: this double never receives a server admission id,
+  // so it answers null exactly like a non-FIFO gateway reply.
   @override
-  Future<void> submitQueuedPrompt(String runtimeSessionId, String text) async =>
-      _record('queued', text, null);
+  Future<String?> submitQueuedPrompt(
+    String runtimeSessionId,
+    String text,
+  ) async {
+    _record('queued', text, null);
+    return null;
+  }
 
   @override
-  Future<void> submitQueuedPromptWithSurface(
+  Future<String?> submitQueuedPromptWithSurface(
     String runtimeSessionId,
     String text,
     PromptClientSurface surface,
-  ) async => _record('queued', text, surface);
+  ) async {
+    _record('queued', text, surface);
+    return null;
+  }
 
   @override
   Future<DesktopTurnAck> submitQueuedPromptIdempotent(

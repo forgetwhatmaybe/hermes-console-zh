@@ -136,9 +136,15 @@ class _QueuedDrainGateway extends _QueueGateway
     String model = '',
   }) => resumeSession('session-queue-drain', profile: profile);
 
+  // No server admission id exists in this double: a queued send without the
+  // handle is a normal reply, so it answers null.
   @override
-  Future<void> submitQueuedPrompt(String runtimeSessionId, String text) async {
+  Future<String?> submitQueuedPrompt(
+    String runtimeSessionId,
+    String text,
+  ) async {
     queuedSubmissions.add(text);
+    return null;
   }
 
   @override

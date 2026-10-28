@@ -102,12 +102,17 @@ class RecordingDesktopGateway
     PromptClientSurface surface,
   ) => throw UnimplementedError('idempotent path is not used here');
 
+  // This recorder stands in for a gateway that answers a queued send without an
+  // admission id, so it returns null instead of inventing a handle.
   @override
-  Future<void> submitQueuedPromptWithSurface(
+  Future<String?> submitQueuedPromptWithSurface(
     String runtimeSessionId,
     String text,
     PromptClientSurface surface,
-  ) async => _submit(text, surface, kind: 'queued');
+  ) async {
+    _submit(text, surface, kind: 'queued');
+    return null;
+  }
 
   @override
   Future<DesktopTurnAck> submitQueuedPromptIdempotentWithSurface(

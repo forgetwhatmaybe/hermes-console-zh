@@ -78,6 +78,16 @@ abstract final class ReplayBatchProof {
         return const ReplayBatchQuarantine('replay count mismatch');
       }
     }
+    // The authority path sets this alongside (today: identically to) `truncated`
+    // when the batch cannot be applied and the caller must re-read a snapshot.
+    // Legacy servers omit the key entirely, so absence means "not required".
+    final snapshotRequired = result['snapshot_required'];
+    if (snapshotRequired != null && snapshotRequired is! bool) {
+      return const ReplayBatchQuarantine('invalid snapshot_required flag');
+    }
+    if (snapshotRequired == true) {
+      return const ReplayBatchQuarantine('snapshot required');
+    }
     if (truncated) {
       return const ReplayBatchQuarantine('replay truncated');
     }

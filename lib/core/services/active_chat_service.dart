@@ -20347,6 +20347,25 @@ class ActiveChat {
                 'Hermes returned an invalid idempotent acknowledgement',
               );
             }
+            // The ack carries the durable row the server wrote for this prompt.
+            // Cache it so a later edit or truncate can address the row directly
+            // instead of guessing by message text (which picks nothing when two
+            // prompts share the same words). Only fills a gap: an existing row
+            // id may already be correct and must not be overwritten.
+            final ackedRowId = ack.userRowId;
+            if (ackedRowId != null) {
+              // _messages is newest-first (every insert is `insert(0, …)`), so
+              // the prompt this ack belongs to is the FIRST real user turn from
+              // the front — walking from the tail would bind the oldest one.
+              for (var index = 0; index < _messages.length; index++) {
+                final message = _messages[index];
+                if (!isRealUserTurn(message)) continue;
+                if (canonicalTranscriptRowId(message) == null) {
+                  message['_desktopRowId'] = ackedRowId;
+                }
+                break;
+              }
+            }
             if (ack.state == DesktopTurnState.terminal) {
               await _completeRun();
             }
