@@ -12,6 +12,7 @@ path = [
   ".gitignore",
   ".gitleaks.toml",
   ".metadata",
+  "*.cmd",
   "*.md",
   "ASSET_PROVENANCE.md",
   "CHANGELOG.md",
