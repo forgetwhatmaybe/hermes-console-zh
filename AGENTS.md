@@ -60,22 +60,53 @@ this repository.
 
 ## Testing
 
-- Three environment pieces must be repaired first, or `flutter_tester` never connects. All three
-  are stripped by the agent sandbox, none of them is a missing capability:
-  1. **Proxy** — Dart's `HttpClient` honours `http_proxy`, so `flutter_tester` sends its own
-     VM-service WebSocket through it and fails the upgrade:
+- This session's tool shell arrives with three gaps, and `flutter_tester` will not connect until
+  all three are closed. None of them is a missing capability.
+  **All three fixes and the `flutter test` call must happen in one shell invocation** — each bash
+  call starts fresh, so an `export` in one call is gone by the next:
+  1. **Proxy — injected, not missing.** `http_proxy`/`https_proxy` point at a localhost sidecar.
+     `CODEBUDDY_SERVICE_PROXY_URL` is a sibling entry on a different port — do not use it as the
+     proxy address. Dart's `HttpClient` honours those variables and ignores the Windows proxy
+     bypass list, so it sends `flutter_tester`'s own VM-service WebSocket through the sidecar and
+     the upgrade fails:
      ```bash
      unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
      export no_proxy=localhost,127.0.0.1,::1
+     export NO_PROXY=localhost,127.0.0.1,::1
      ```
-  2. **PATH** — it arrives with only a handful of entries and no PowerShell directory, so the
-     tool reports `PowerShell executable not found`. Prepend
-     `%SystemRoot%\System32\WindowsPowerShell\v1.0`. Do **not** prepend `System32` itself: it
-     shadows GNU `timeout`/`find` with the Windows binaries.
-  3. **Variables** — `LOCALAPPDATA`, `APPDATA`, `USERPROFILE`, `ProgramFiles`, `ProgramFiles(x86)`,
-     `ProgramData`, `ComSpec` are absent; pub stops with `No pub cache` then
-     `%PROGRAMFILES(X86)% not found`. `ProgramFiles(x86)` contains parentheses and cannot be
-     exported from bash — set it from python (or from the PowerShell tool).
+  2. **PATH — trimmed.** It arrives with a handful of entries and no PowerShell directory, so the
+     tool reports `PowerShell executable not found`. `%SystemRoot%` is not set in this shell and
+     `%…%` is cmd syntax, so it would be pasted as-is — write the path out:
+     ```bash
+     export PATH="/c/windows/System32/WindowsPowerShell/v1.0:$PATH"
+     ```
+     One guard to know about: this host rejects any command where `powershell` appears as a
+     **standalone word**, in any capitalisation (`PowerShell.exe` is rejected just like
+     `powershell.exe`). A path segment is not a standalone word, so
+     `/c/windows/System32/WindowsPowerShell/v1.0` is safe to write out.
+     Do **not** prepend `System32` itself: it shadows GNU `timeout`/`find` with the Windows
+     binaries (`timeout` then fails with "无效语法。默认选项不允许超过 '1' 次").
+  3. **Env vars — these really are missing.** `LOCALAPPDATA`, `ProgramFiles`, `ProgramFiles(x86)`,
+     `ProgramData`, `ComSpec` are absent (`APPDATA` and `USERPROFILE` are still there). pub stops
+     with `No pub cache` then `%PROGRAMFILES(X86)% not found`. `ProgramFiles(x86)` contains
+     parentheses and bash refuses it (`export: not a valid identifier`), so build the env in python
+     and launch flutter from that same process:
+     ```python
+     import os
+     env = dict(os.environ)
+     env.update({
+         "LOCALAPPDATA":      os.path.join(env["USERPROFILE"], "AppData", "Local"),
+         "ProgramFiles":      r"C:\Program Files",
+         "ProgramFiles(x86)": r"C:\Program Files (x86)",
+         "ProgramData":       r"C:\ProgramData",
+         "ComSpec":           r"C:\Windows\system32\cmd.exe",
+     })
+     ```
+     `USERPROFILE` is still set, so derive `LOCALAPPDATA` from it rather than hardcoding a user
+     name — a literal `C:\Users\<user>\…` is not a real path and pub keeps failing.
+     It has to be the same process: setting `$env:X` from the PowerShell tool does not reach a
+     later bash run, which is why "set it in PowerShell then run flutter in bash" fails.
+     `TEMP`/`TMP` are already set — leave them.
   ```bash
   /c/flutter/bin/flutter.bat test <files>
   /c/flutter/bin/flutter.bat analyze lib test
@@ -93,10 +124,17 @@ this repository.
   appeared. Of the two, `chat_screen_test.dart` "rechazo por owner conserva
   turno y bloquea reenvío hasta recheck" fails in isolation too (expected UI
   text `No se puede continuar en directo` never renders — the composer refuses
-  with `turnFailed` first; both the test and the string date from `3fd569f`,
-  1.2.10), while the two `hosted_group_completeness_boundary_test.dart`
-  fail-closed cases are timing-shaped and did not reproduce on every run. Treat
-  the first as a real open failure, not as baseline noise.
+  with `turnFailed` first). The test dates from `3fd569f` (1.2.10); the Spanish
+  string it asserts was last touched in `977966f`. Treat it as a real open
+  failure, not baseline noise. The other new one is a single
+  `hosted_group_completeness_boundary_test.dart` case (`groups.list fails closed
+  when its exact channel closes`): an earlier full run the same day ended at
+  15551 / 68, so it is not reproducible every time — timing-shaped. The per-case
+  names in that earlier run were lost (truncated log), so it is not pinned down
+  further.
+- The helper script writes its log as `flutter-<timestamp>.log`, so repeated runs do not overwrite
+  each other. If you redirect `flutter test` yourself, do the same — one overwritten log already
+  cost a re-run to recover the numbers.
 - Baseline inside `test/chat_screen_test.dart`: 8 failures (generated image
   cache, in-flight media ownership, official producer paths, App Lock
   prefetch, two Galería dedupe cases). Do not "fix" them as part of an
