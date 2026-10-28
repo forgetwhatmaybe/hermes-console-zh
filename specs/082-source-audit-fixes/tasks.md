@@ -99,11 +99,15 @@ Safety review is BLOCKED. T1/REVIEW-FINAL/DEPLOY remain unchecked intentionally.
 > T1-FIX / T1-GREEN / VERIFY / DEPLOY checkboxes stay open until the client half is rerun.
 >
 > Client-side items still open:
-> - **T1-FIX / T1-GREEN** — the client half has not been rerun RED→GREEN. `flutter test`
->   cannot start in this environment (`flutter_tester` needs `PowerShell.exe` and `wsl.exe`,
->   both blocked), so there is no client test evidence for this batch.
-> - **VERIFY** — `flutter analyze lib test` is clean (`No issues found`); `flutter test` was
->   not executed. Compare by failure NAME once a working runner is available.
+> - **T1-FIX / T1-GREEN** — the client half has not been rerun RED→GREEN for this spec's own
+>   cases. The runner *is* usable: the earlier "cannot start" note was wrong — it needed three
+>   sandbox repairs (drop the injected `http_proxy`, add the Windows PowerShell dir to PATH,
+>   restore `LOCALAPPDATA`/`ProgramFiles(x86)`; scripted in the audit workspace).
+> - **VERIFY** — `flutter analyze lib test` is clean (`No issues found`). Full `flutter test`
+>   measured 2026-10-28: 15549 passed / 70 failed / 16 skipped vs the baseline of
+>   15412 / 72 / 16. The six must-stay-green suites are green; two failures are new (one stable
+>   in `chat_screen_test.dart`, one timing-shaped in `hosted_group_completeness_boundary_test.dart`).
+>   Spec-082's own suite still has no RED→GREEN ticket.
 > - **DEPLOY** — server deployed on the dashboard host. No APK rebuild: this work does not change the
 >   client protocol, so the existing build remains valid.
 >

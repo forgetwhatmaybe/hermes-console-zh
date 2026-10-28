@@ -60,9 +60,23 @@ this repository.
 
 ## Testing
 
-- Run with the proxy unset, or `flutter_tester` fails the WebSocket upgrade:
+- Three environment pieces must be repaired first, or `flutter_tester` never connects. All three
+  are stripped by the agent sandbox, none of them is a missing capability:
+  1. **Proxy** — Dart's `HttpClient` honours `http_proxy`, so `flutter_tester` sends its own
+     VM-service WebSocket through it and fails the upgrade:
+     ```bash
+     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+     export no_proxy=localhost,127.0.0.1,::1
+     ```
+  2. **PATH** — it arrives with only a handful of entries and no PowerShell directory, so the
+     tool reports `PowerShell executable not found`. Prepend
+     `%SystemRoot%\System32\WindowsPowerShell\v1.0`. Do **not** prepend `System32` itself: it
+     shadows GNU `timeout`/`find` with the Windows binaries.
+  3. **Variables** — `LOCALAPPDATA`, `APPDATA`, `USERPROFILE`, `ProgramFiles`, `ProgramFiles(x86)`,
+     `ProgramData`, `ComSpec` are absent; pub stops with `No pub cache` then
+     `%PROGRAMFILES(X86)% not found`. `ProgramFiles(x86)` contains parentheses and cannot be
+     exported from bash — set it from python (or from the PowerShell tool).
   ```bash
-  export -n http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
   /c/flutter/bin/flutter.bat test <files>
   /c/flutter/bin/flutter.bat analyze lib test
   ```
@@ -74,6 +88,15 @@ this repository.
   pending timers, Windows temp-dir cleanup, real-socket timing — and none of
   the suites below is among them. Compare by failure NAME, not by count: do not
   regenerate a golden to make a suite pass.
+- Re-measured at `1.3.2+20023` (2026-10-28, `4859884`): 15549 passed / 70 failed
+  / 16 skipped. Diffed by name against the `+20018` log: 4 failures cleared, 2
+  appeared. Of the two, `chat_screen_test.dart` "rechazo por owner conserva
+  turno y bloquea reenvío hasta recheck" fails in isolation too (expected UI
+  text `No se puede continuar en directo` never renders — the composer refuses
+  with `turnFailed` first; both the test and the string date from `3fd569f`,
+  1.2.10), while the two `hosted_group_completeness_boundary_test.dart`
+  fail-closed cases are timing-shaped and did not reproduce on every run. Treat
+  the first as a real open failure, not as baseline noise.
 - Baseline inside `test/chat_screen_test.dart`: 8 failures (generated image
   cache, in-flight media ownership, official producer paths, App Lock
   prefetch, two Galería dedupe cases). Do not "fix" them as part of an
