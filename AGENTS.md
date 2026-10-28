@@ -200,6 +200,9 @@ on Windows — the Gradle half cannot run and the result would differ for the wr
 
 ## Docs map (read before a first change)
 
+- `docs/REPAIR_BACKLOG.md` — what is still broken, in priority order, with the
+  `file:line` and the acceptance test for each item. Read this before picking up
+  repair work that is not yours.
 - `docs/CODE_MAP.md` — entry point: layers, one message end to end,
   invariants, change manual (which files and which suites for each kind of
   change), and the known traps.
