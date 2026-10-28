@@ -58,6 +58,49 @@ The main model is **not isolated per profile**: `POST /api/model/set?profile=X`
 changes the model of the running gateway (there is a single gateway). The app
 asks for confirmation first. That is Hermes' semantics, not an app bug.
 
+### Snapshot replay watermark
+
+The `session.resume` / `session.activate` result — the `LiveSessionSnapshot` root — may carry
+two optional fields. They are **not** on canonical `session.info`:
+
+- `last_sequence` (int): every `/api/ws` event frame with `seq <= last_sequence`
+  is already reflected in the snapshot content. A reconnecting client resumes
+  from `events.since(last_seen = <that last_sequence>)` instead of re-reading the transcript
+  (the wire parameter is `last_seen`, not `last_sequence`).
+- `replay_epoch` (str): identifies the server process that owns the `seq`
+  numbering. The client adopts it from `gateway.ready` and compares by
+  **equality**; it is never incremented or reset client-side. A changed epoch
+  means the counter restarted, so the client replays from its own durable
+  watermark instead of trusting a stored `seq`. When the field is absent the
+  client clears its watermark rather than renumbering.
+
+Both are optional: servers that predate them omit the keys, and a cold path
+answers `0` for a brand-new runtime session. Parse them defensively and keep the
+existing watermark when they are absent.
+
+`session.events.since` **accepts** a `replay_epoch` argument, but the current server accepts
+and ignores it; the client does not send it. Treat a process change as something learned from
+the response `epoch` (`truncated` / `latest_seq` / `epoch`), not from the request.
+
+### Turn idempotency
+
+`prompt.submit` accepts an optional `client_turn_id`. When present, the result
+carries an ack (`accepted`, `client_turn_id`, `server_turn_id`, `state`,
+`duplicate`):
+
+- `state` is `accepted` | `running` | `terminal`. A retry of a key that already
+  finished learns `terminal` instead of opening a second turn.
+- `duplicate = true` means the key was already registered and this delivery was
+  not executed again.
+- Requests without `client_turn_id` keep the legacy result shape — the ack
+  fields stay absent, so older clients are unaffected.
+
+`gateway.capabilities` advertises `turn_idempotency: bool`. It is `true` only
+when the same server also answers `turn.status`, i.e. both halves of the
+idempotency contract are reachable. Treat it as the gate: with `true` a client
+may safely retry a submit with the same key; with `false` (or the key absent) it
+must not rely on the ack and keeps its existing ambiguous-delivery handling.
+
 ### Local admission repair: interrupted submit
 
 The paired local server repair may answer `prompt.submit` with JSON-RPC error

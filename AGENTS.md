@@ -103,6 +103,22 @@ this repository.
 - Keep these in sync with the code in the same change that moves the contract;
   stale line numbers are a bug in the map.
 
+## Documentation and review gates (owner directive, 2026-10-28)
+
+**Docs ship with the change.** Every finished task updates the documents it invalidated in the
+same change — this file, `docs/ARCHITECTURE.md`, `docs/UPSTREAM_CONTRACT.md`, `docs/CODE_MAP.md`,
+`docs/_map/*.md`, `docs/ERROR_STRINGS.md`, and the `specs/<NNN>/` state lines. A stale status line
+("remains open", "BLOCKED", "do not deploy", an off-by-N line number) is a **defect**: it makes the
+next reader — human or agent — act on a false premise. Write state as facts with evidence (commit
+range, test counts, dates). Keep unfinished items visibly unfinished; a "done" summary must not
+absorb them.
+
+**Review before you touch, not only after.** Before editing, dispatch a read-only sub-agent to
+review the current state *and* the proposed change: what the evidence actually proves, what the edit
+would break, which neighbouring assumption it invalidates. Fix the plan first. This pre-check does
+not replace the final independent review ticket — both gates apply — and no sub-agent self-report
+counts as verification.
+
 ## Active source-audit repair (2026-10-26)
 
 - Current owner-authorized scope and acceptance: `specs/082-source-audit-fixes/`.

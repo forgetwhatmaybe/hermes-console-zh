@@ -1,8 +1,10 @@
 # chat 核心链路地图（发送 / 幂等 / 断线回补）
 
-只读梳理，未改动 `lib/`、`test/`。下列行号基于当前工作区（2026-10-26）逐条用 `grep -n` / `sed -n` 核对过；未能核对的会标「未验证」（本文所有行号均已核对，无此类条目）。
+只读梳理，未改动 `lib/`、`test/`。表格「关键类 / 入口」的入口行号已按 **HEAD `977966f`**（2026-10-27）用 `grep -n` 逐个重核。
 
-> 行号基准是**工作区文件**（`lib/` 下多个目标文件处于已修改未提交状态），不是 `HEAD`；提交或回滚后再引用请重新核对。
+> ⚠️ **正文行号仍是 2026-10-26 工作区快照，且偏移不统一**：`active_chat_service.dart` 在那之后被多次插入（前 176 行未变、约 390 行处 +2、16k 之后 +14）。**不要整体 +14**——照那个算会得到自相矛盾的区间。引用正文行号前先 `grep -n "<符号>"` 复核。
+>
+> `lib/` 已于 2026-10-27 提交（`977966f`），工作树干净。
 
 关于范围：`chat_screen.dart` 不在指定范围，但幂等键的**生成**与 durable 读的**入口**只存在于该文件，相关行已单独标注「范围外」，只作链路闭合用。
 
@@ -12,7 +14,7 @@
 
 | 文件 | 一句话 | 关键类 / 入口（行号） |
 | --- | --- | --- |
-| `lib/core/services/active_chat_service.dart` | 单个会话的运行态：发送、outbox 生命周期、流式投影、终态、恢复状态机；同时是 `ActiveChat` 的装配器。 | `ActiveChat`（4599）、`send`（15435）、`_send`（15676）、`ActiveTurnDelivery`（2897）、`_recoverDesktopTurn`（21613）、`_completeRun`（28153）、`_failRun`（29100）、`_onDesktopEvent`（23065）、`ActiveChatService.attach`（32746，内部 32846 构造 `ActiveChat`） |
+| `lib/core/services/active_chat_service.dart` | 单个会话的运行态：发送、outbox 生命周期、流式投影、终态、恢复状态机；同时是 `ActiveChat` 的装配器。 | `ActiveChat`（4613）、`send`（15449）、`_send`（15690）、`ActiveTurnDelivery`（2911）、`_recoverDesktopTurn`（21627）、`_completeRun`（28167）、`_failRun`（29114）、`_onDesktopEvent`（23079）、`ActiveChatService.attach`（32760，内部 32860 构造 `ActiveChat`） |
 | `lib/core/services/tui_gateway_client.dart` | Desktop JSON-RPC/WebSocket 传输层：持有**唯一** `ReplayCoordinator`，做 epoch/watermark 准入、replay 拉取、quarantine、恢复凭证铸造与边界采纳。 | `TuiGatewayClient`（1519）、`events`（1903）、`connect`（1959）、`_replayCoordinator`（1845）、`_fetchReplay`（2818）、`_requestRuntimeRehydration`（3397）、`_requestPromptSubmit`（3693）、`recoveryProofForSnapshot`（5707）、`commitRecovery`（5766）、`adoptViewerSnapshotBoundary`（5800）、`_submitIdempotent`（8444） |
 | `lib/core/services/replay_coordinator.dart` | 纯内存乱序/缺口裁决器：watermark、quarantine、held 帧、replay 批次、恢复凭证（proof）与快照边界。无 IO。 | `ReplayCoordinator`（96）、`acceptLive`（232）、`validateReplay`（319）、`commitRecovery`（548）、`adoptSnapshotBoundary`（610）、`releaseForNewTurn`（465）、`quarantine`（487）、`_recordWatermark`（821） |
 | `lib/core/services/turn_outbox_store.dart` | 加密 outbox（单键 `chat_turn_outbox_v1`）：按 `clientTurnId` 持久化未确认批次，"未确认即 ambiguous"，另有丢弃墓碑（discard tombstone）与附件所有权协调。 | `TurnOutboxStore`（313）、`save`（593）、`loadAllForChat`（665）、`loadForChat`（796）、`delete`（903）、`discardFailedBeforeAcceptance`（926）、`AttachmentOwnershipCoordinator`（127） |

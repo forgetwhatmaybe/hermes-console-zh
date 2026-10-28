@@ -85,6 +85,30 @@ is RED, primary has read it but not rerun it. Preserve both tests/logs. The
 correctness reviewer final response was platform-blocked; no final PASS ticket.
 Safety review is BLOCKED. T1/REVIEW-FINAL/DEPLOY remain unchecked intentionally.
 
+> **Superseded 2026-10-28 — the paragraph above describes the 2026-10-26 state.**
+>
+> The **server side** of HIGH-1 and HIGH-2 is closed in the backend repository: branch
+> `fix/turn-admission-races-v2` (`a7b95a7`..`c23ef9680d`, patches 0001–0004 exported to the
+> private `hermes-patches` repo). Both primary counterexamples are RED on the pre-fix source
+> and GREEN after; 24 targeted suites report 294 passed / 2 skipped; independent read-only
+> review rounds 1–8 ran (1–7 FAIL, each fixed and re-reviewed; 8 PASS with no HIGH), plus a
+> ninth PASS round covering the round-8 MEDIUM items. Deployed on the
+> dashboard host (2026-10-27 20:42, commit `c23ef9680d`).
+>
+> **Still true for 082 itself**: this spec's own REVIEW-FINAL has no PASS ticket, and its
+> T1-FIX / T1-GREEN / VERIFY / DEPLOY checkboxes stay open until the client half is rerun.
+>
+> Client-side items still open:
+> - **T1-FIX / T1-GREEN** — the client half has not been rerun RED→GREEN. `flutter test`
+>   cannot start in this environment (`flutter_tester` needs `PowerShell.exe` and `wsl.exe`,
+>   both blocked), so there is no client test evidence for this batch.
+> - **VERIFY** — `flutter analyze lib test` is clean (`No issues found`); `flutter test` was
+>   not executed. Compare by failure NAME once a working runner is available.
+> - **DEPLOY** — server deployed on the dashboard host. No APK rebuild: this work does not change the
+>   client protocol, so the existing build remains valid.
+>
+> Cross-repo plan and remaining items: `docs/PLAN-2026-10-28-cross-repo.md`.
+
 Privacy scanner covered both worktrees/indexes plus 2 Console and 3 backend
 pending commits, with zero newly introduced task-sensitive matches at scan time.
 Existing findings are debt. Latest APK 20023 is a local candidate; backend was
