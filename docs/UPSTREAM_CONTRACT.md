@@ -95,11 +95,23 @@ carries an ack (`accepted`, `client_turn_id`, `server_turn_id`, `state`,
 - Requests without `client_turn_id` keep the legacy result shape — the ack
   fields stay absent, so older clients are unaffected.
 
-`gateway.capabilities` advertises `turn_idempotency: bool`. It is `true` only
-when the same server also answers `turn.status`, i.e. both halves of the
-idempotency contract are reachable. Treat it as the gate: with `true` a client
-may safely retry a submit with the same key; with `false` (or the key absent) it
-must not rely on the ack and keeps its existing ambiguous-delivery handling.
+**When the ack is present, both are non-empty**: `duplicate` is a JSON bool and
+`server_turn_id` is a non-empty string. A client may enforce both (the Console
+client does, and that is correct).
+
+How that guarantee is produced matters if you read the server: it is **ordering**,
+not a self-contained check. `_lock_in_submit_turn` claims the key
+(`methods_prompt.py:1145`) and is called at `:1305`, before any ack is published
+(`:1380` compute dispatch, `:1462` inline result); a refused claim returns `5038`
+at `:1149` and never reaches an ack. The two defensive defaults —
+`entry.get("server_turn_id") or ""` (`:1019`) and `server_turn_id = None`
+(`:1434`) — therefore never land on a reachable path, and the `entry is None`
+branches guarding the two other `_client_turn_ack` callers (`:1218`, `:1327`)
+return errors before an ack.
+
+Do not restate this as "the helper may emit an empty id": it cannot, on any path
+that answers. If a future edit moves an ack before the claim, this becomes a real
+client crash — the ordering is the invariant to preserve.
 
 ### Local admission repair: interrupted submit
 
