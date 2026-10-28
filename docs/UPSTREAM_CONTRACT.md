@@ -119,6 +119,35 @@ Do not restate this as "the helper may emit an empty id": it cannot, on any path
 that answers. If a future edit moves an ack before the claim, this becomes a real
 client crash — the ordering is the invariant to preserve.
 
+### Error codes are a coarse class, not a semantic key
+
+Measured 2026-10-28 on the local server: **110 distinct codes across 412 call sites**
+(`tui_gateway/`), and the same code carries unrelated meanings — `4001` is used for
+`client_turn_id required`, `invalid_params`, `malformed server config` and
+`config.set model requires a live session` alike.
+
+So:
+
+- Split by range only. `4xxx` (62 codes, 4000–4403) = the request or its parameters were
+  rejected; `5xxx` (48 codes, 5000–5400) = the server accepted the request and failed while
+  carrying it out. That is all the number tells you.
+- **Do not add new branches on a specific code.** A client that special-cases `4004` will
+  misfire on the next method that reuses it.
+- `error.data.reason` is the discriminator, and it has **30+ values**, not a closed enum:
+  local snake_case reasons (`submit_interrupted`, `invalid_params`, `send_failed`,
+  `unknown_profile`, `runtime_unavailable`, `empty`, `wake_owned`), uppercase tokens passed
+  up from deeper layers (`SESSION_NOT_OWNED`, `SESSION_OWNER_UNCONFIRMED`,
+  `SESSION_OWNER_BUSY`, 16 `ConnectorErrorReason` values) and forwarded ledger refusals
+  (`queue_full`, `runtime_draining`, `profile_mismatch`, `permission_denied`, `not_found`).
+  Match the values you care about by equality and treat everything else as "no reason given".
+- Otherwise the semantics live in `error.message`, which is human text and may be reworded.
+
+**This client is currently mixed, and that is a known debt, not a pattern to copy.** It maps
+reasons in `turn_error_surface.dart:241` (`_codePlans`) and `active_chat_service.dart:69`
+(`SESSION_NOT_OWNED`), but it also branches on concrete codes as compatibility signals:
+`tui_gateway_client.dart:8512` (`-32601` / `4000` / `4001`), `:7822` (`-32602` / `4023`) and
+`:8208` (`404`). Do not extend that set — if a new case needs distinguishing, add a `reason`.
+
 ### Local admission repair: interrupted submit
 
 The paired local server repair may answer `prompt.submit` with JSON-RPC error
