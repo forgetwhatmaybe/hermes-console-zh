@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../capabilities/capabilities_screen.dart';
+import '../design/modal.dart'
+    show HermesDialogAction, HermesDialogActionStyle, showHermesFormDialog;
 import '../screens/activity_screen.dart';
 import '../screens/appearance_screen.dart';
 import '../screens/chat_screen.dart';
@@ -36,6 +38,7 @@ import '../utils/home_recent_sessions.dart';
 import '../utils/session_timestamp.dart';
 import '../utils/session_title.dart';
 import '../../l10n/app_localizations.dart';
+import 'hermes_premium_ui.dart' show DisposeControllersOnUnmount;
 import 'instance_kind_picker.dart';
 import 'menu_back_guard.dart';
 import 'mission_profile_avatar.dart';
@@ -925,30 +928,29 @@ class _DrawerHeader extends StatelessWidget {
   ) async {
     final s = Strings.of(context);
     final controller = TextEditingController(text: saved.label);
-    final name = await showDialog<String>(
+    final confirmed = await showHermesFormDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(s.drawerRenameTitle),
-        content: TextField(
+      title: s.drawerRenameTitle,
+      body: (dialogContext, setState) => DisposeControllersOnUnmount(
+        controllers: [controller],
+        child: TextField(
           controller: controller,
           autofocus: true,
           textInputAction: TextInputAction.done,
           decoration: InputDecoration(labelText: s.drawerRenameField),
-          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(true),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(s.commonCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: Text(s.commonSave),
-          ),
-        ],
       ),
+      actions: [
+        HermesDialogAction(
+          label: s.commonCancel,
+          value: false,
+          style: HermesDialogActionStyle.cancel,
+        ),
+        HermesDialogAction(label: s.commonSave, value: true),
+      ],
     );
-    controller.dispose();
+    final name = confirmed == true ? controller.text : null;
     final trimmed = name?.trim() ?? '';
     if (trimmed.isEmpty || trimmed == saved.label) return;
     await onRename(saved, trimmed);
@@ -1026,8 +1028,12 @@ class _DrawerHeader extends StatelessWidget {
                   Strings.of(context).drawerRenameHint,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  // Read-only hint, not a disabled control: textDisabled is the
+                  // ink of something the user cannot use right now (WCAG 1.4.3
+                  // exempts inactive components), and this caption is always
+                  // readable. textTertiary reaches AA in every theme.
                   style: TextStyle(
-                    color: colors.textDisabled,
+                    color: colors.textTertiary,
                     fontSize: 11,
                   ),
                 ),

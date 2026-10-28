@@ -14,7 +14,9 @@ Map<String, int> _scan(RegExp pattern, {Set<String> skip = const {}}) {
   final out = <String, int>{};
   for (final entity in Directory('lib').listSync(recursive: true)) {
     if (entity is! File || !entity.path.endsWith('.dart')) continue;
-    final path = entity.path.replaceAll(r'\\', '/');
+    // '\\' is ONE backslash: a raw r'\\' would be two, never matching a
+    // Windows path, so every allowlist entry silently resolved to 0 there.
+    final path = entity.path.replaceAll('\\', '/');
     if (path.startsWith('lib/l10n/') || skip.contains(path)) continue;
     final n = pattern
         .allMatches(_withoutComments(entity.readAsStringSync()))

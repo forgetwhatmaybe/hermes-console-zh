@@ -26,6 +26,7 @@ import '../artifact_viewer/artifact_viewer_screen.dart';
 import '../../design/edges.dart';
 import '../hermes_app_bar.dart';
 import '../hermes_notice.dart';
+import '../hermes_premium_ui.dart' show DisposeControllersOnUnmount;
 import '../hermes_ui.dart' show HermesPanel;
 import 'project_file_icons.dart';
 import 'project_text_editor_screen.dart';
@@ -91,29 +92,28 @@ Future<void> _showGoToPath(
   Strings strings,
 ) async {
   final text = TextEditingController(text: controller.path);
-  final target = await showDialog<String>(
+  final confirmed = await showHermesFormDialog<bool>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text(strings.serverPathGoTo),
-      content: TextField(
+    title: strings.serverPathGoTo,
+    body: (dialogContext, setState) => DisposeControllersOnUnmount(
+      controllers: [text],
+      child: TextField(
         controller: text,
         autofocus: true,
         decoration: InputDecoration(hintText: controller.root),
-        onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        onSubmitted: (value) => Navigator.of(dialogContext).pop(true),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: Text(strings.commonCancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(text.text),
-          child: Text(strings.commonOpen),
-        ),
-      ],
     ),
+    actions: [
+      HermesDialogAction(
+        label: strings.commonCancel,
+        value: false,
+        style: HermesDialogActionStyle.cancel,
+      ),
+      HermesDialogAction(label: strings.commonOpen, value: true),
+    ],
   );
-  text.dispose();
+  final target = confirmed == true ? text.text : null;
   final trimmed = target?.trim() ?? '';
   if (trimmed.isEmpty) return;
   await controller.retarget(trimmed);

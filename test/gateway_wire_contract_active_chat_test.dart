@@ -222,6 +222,21 @@ final _connectionUpdateEffect = _Effect(
 
 /// Events the live chat renders or acts on, with the effect each must show.
 final Map<String, _Effect> _handled = {
+  // Live usage tick (5fb107a): token/rate figures update and the status line
+  // republishes. Was listed as ignored back when usage was only read through
+  // session.info; the live channel now owns it, so a handler turned into a
+  // no-op has to fail the same way every other handled event does.
+  'session.usage': _Effect((chat, payload, emitted, label) {
+    final usage = payload['usage'] is Map ? payload['usage'] as Map : payload;
+    final hasFigure =
+        usage['total'] != null ||
+        usage['output'] != null ||
+        usage['avg_tps'] != null;
+    // A tick with no numbers at all carries nothing to render; it must simply
+    // not throw, which the surrounding harness already asserts.
+    if (!hasFigure) return false;
+    return _emits(emitted, ActiveChatEvent.responseMetrics, label);
+  }),
   'connection.request': _connectionRequestEffect,
   'connection.update': _connectionUpdateEffect,
   'message.start': _emitsAlways(ActiveChatEvent.waiting),
@@ -363,7 +378,6 @@ const Map<String, String> _ignored = {
       '(_translateRequestCancel); raw, it only confirms an interrupt the '
       'user started (covered by the stop tests)',
   'session.title': 'titles are read from the session list, not the live chat',
-  'session.usage': 'usage is read by session.info / context breakdown',
   'cron.changed': 'consumed by the cron screens, not the chat',
   'pet.changed': 'consumed by ProfilePetService, not the chat',
   'projects.changed': 'no projects view in the chat',
