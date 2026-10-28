@@ -122,11 +122,15 @@ this repository.
 - Re-measured at `1.3.2+20023` (2026-10-28, `4859884`): 15549 passed / 70 failed
   / 16 skipped. Diffed by name against the `+20018` log: 4 failures cleared, 2
   appeared. Of the two, `chat_screen_test.dart` "rechazo por owner conserva
-  turno y bloquea reenvío hasta recheck" fails in isolation too (expected UI
-  text `No se puede continuar en directo` never renders — the composer refuses
-  with `turnFailed` first). The test dates from `3fd569f` (1.2.10); the Spanish
-  string it asserts was last touched in `977966f`. Treat it as a real open
-  failure, not baseline noise. The other new one is a single
+  turno y bloquea reenvío hasta recheck" was a real open failure, fixed in
+  `3138b87`. Root cause was stale assertions, not a missing render: the error
+  bubble paints the localised `errSessionNotOwned` ("Esta conversación pertenece
+  a otro gateway o proceso y no puede continuar en directo…"), while the test
+  still expected the service-layer raw wording ("No se puede continuar en
+  directo…") — same refusal, two different strings since `977966f`. The two
+  `textContaining` assertions now match l10n; the stored-`content` assertion
+  still pins the raw form. `chat_screen_test` is now 812 passed / 8 failed, and
+  those 8 are exactly the baseline list above. The other new one is a single
   `hosted_group_completeness_boundary_test.dart` case (`groups.list fails closed
   when its exact channel closes`): an earlier full run the same day ended at
   15551 / 68, so it is not reproducible every time — timing-shaped. The per-case
