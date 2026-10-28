@@ -30,6 +30,16 @@ const _knownMethodDrift = <String, String>{
   'turn.status':
       'idempotent turn probe of the exclusive-submit extension; Console '
       'treats a missing method as "unknown" and falls back',
+  // Queued-admission control. Both are real canonical methods the gateway
+  // defines and registers on /api/ws (contracts/canonical_sessions.py:
+  // 'prompt.steer_queued', 'prompt.replace_queued'), but the published
+  // openrpc snapshot in this repo predates them, so the drift check cannot see
+  // them yet. Listed rather than silently ignored; drop these two entries the
+  // next time gateway-contract.openrpc.json is regenerated.
+  'prompt.steer_queued':
+      'canonical queued-admission steer; missing from the openrpc snapshot',
+  'prompt.replace_queued':
+      'canonical queued-admission replace; missing from the openrpc snapshot',
 };
 
 /// Event types Console branches on that the contract does not publish.
