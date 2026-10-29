@@ -6264,7 +6264,20 @@ class _ChatScreenState extends State<ChatScreen>
         connectedOnly: connectedOnly,
         isCurrent: isCurrent,
       );
-      if (catalog == null || (isCurrent != null && !isCurrent())) return null;
+      if (catalog == null) {
+        // No catalog at all: no warm shared socket and no runtime to open one.
+        // Recorded because the sheet otherwise shows only the Dashboard, which
+        // makes it look like the socket answered fine.
+        if (isCurrent == null || isCurrent()) {
+          _modelPickerCache.noteFailure(
+            failureKey,
+            ModelPickerSource.socket,
+            'no catalog: no warm socket and no desktop runtime',
+          );
+        }
+        return null;
+      }
+      if (isCurrent != null && !isCurrent()) return null;
       if (catalog.providers.any((p) => p.entitlementPending)) {
         // Hermes answered before it knew a provider's plan (every model of
         // it comes as unavailable): a refresh settles it, as Desktop's
@@ -6279,7 +6292,20 @@ class _ChatScreenState extends State<ChatScreen>
         catalog = settled ?? catalog;
       }
       final providers = modelPickerProviders(catalog);
-      if (providers.isEmpty) return null;
+      if (providers.isEmpty) {
+        // The gateway answered, but every provider came back without models.
+        // That is a different failure from "no catalog" and the person needs
+        // to be able to tell them apart without a debugger.
+        if (isCurrent == null || isCurrent()) {
+          _modelPickerCache.noteFailure(
+            failureKey,
+            ModelPickerSource.socket,
+            'gateway returned ${catalog.providers.length} provider(s), '
+            'none with models',
+          );
+        }
+        return null;
+      }
       return (
         ModelActiveInfo(
           model: catalog.currentModel ?? _selectedModel,
