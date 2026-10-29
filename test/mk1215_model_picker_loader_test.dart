@@ -370,4 +370,31 @@ void main() {
       });
     },
   );
+
+  test('the degraded sheet can name the source and the reason', () async {
+    final cache = ModelPickerCache();
+    final key = ModelPickerCache.key('conn-a', 'default');
+    final other = ModelPickerCache.key('conn-b', 'default');
+
+    await expectLater(
+      loadModelPickerCatalog(
+        cache: cache,
+        key: key,
+        sources: {
+          ModelPickerSource.socket: () async =>
+              throw StateError('gateway refused model.options (4007)'),
+        },
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    final detail = cache.describeLastFailures(key);
+    expect(detail, contains('socket:'));
+    expect(detail, contains('4007'));
+    // Another connection/profile must not inherit this reason.
+    expect(cache.describeLastFailures(other), isEmpty);
+    // Signing out wipes it, so it cannot ride into the next account.
+    cache.clear();
+    expect(cache.describeLastFailures(key), isEmpty);
+  });
 }

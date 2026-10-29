@@ -189,6 +189,9 @@ final class ModelPickerCache {
     _entries.clear();
     _failures.clear();
     _degraded.clear();
+    // Otherwise a reason recorded before a sign-out would ride into the next
+    // account's sheet, which is worse than showing nothing.
+    lastReasons.clear();
   }
 
   /// A closed picker releases only its pending read. A later explicit open
@@ -206,11 +209,40 @@ final class ModelPickerCache {
     return at != null && _now().difference(at) < failureCooldown;
   }
 
-  void noteFailure(String key, ModelPickerSource source) =>
-      _failures['$key\u0000${source.name}'] = _now();
+  /// Last failure reason per source, for the picker's own diagnostics line.
+  /// Removed when that source answers, so the line never shows stale reasons.
+  final Map<String, String> lastReasons = {};
 
-  void noteSuccess(String key, ModelPickerSource source) =>
-      _failures.remove('$key\u0000${source.name}');
+  void noteFailure(String key, ModelPickerSource source, [Object? error]) {
+    final composite = '$key\u0000${source.name}';
+    _failures[composite] = _now();
+    if (error != null) lastReasons[composite] = '$error';
+  }
+
+  void noteSuccess(String key, ModelPickerSource source) {
+    final composite = '$key\u0000${source.name}';
+    _failures.remove(composite);
+    lastReasons.remove(composite);
+  }
+
+  /// `socket: <reason> | dashboard: <reason>` for the picker's degraded line.
+  /// Empty when nothing failed — the caller then shows no diagnostics.
+  /// Passing [key] keeps another instance's failures out of this sheet; the
+  /// sheet already computes that key for its load.
+  String describeLastFailures(String key) {
+    final prefix = '$key\u0000';
+    final parts = <String>[];
+    for (final entry in lastReasons.entries) {
+      if (!entry.key.startsWith(prefix)) continue;
+      final source = entry.key.substring(prefix.length);
+      final reason = entry.value.length > 90
+          ? '${entry.value.substring(0, 90)}…'
+          : entry.value;
+      parts.add('$source: $reason');
+    }
+    parts.sort();
+    return parts.join('  |  ');
+  }
 }
 
 /// One HTTP fallback of the picker as the chat screen reads it: `null` when
@@ -275,15 +307,17 @@ Future<ModelPickerResult> _load(
   }) async {
     if (!admitted()) return null;
     ModelPickerResult? result;
+    Object? failure;
     try {
       final pending = sources[source]!();
       result = await (timeout == null ? pending : pending.timeout(timeout));
-    } catch (_) {
+    } catch (error) {
       result = null;
+      failure = error;
     }
     if (!admitted()) return null;
     if (result == null) {
-      cache.noteFailure(key, source);
+      cache.noteFailure(key, source, failure);
     } else {
       cache.noteSuccess(key, source);
     }

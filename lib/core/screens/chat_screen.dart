@@ -6249,6 +6249,10 @@ class _ChatScreenState extends State<ChatScreen>
     bool Function()? isCurrent,
   }) async {
     if (isCurrent != null && !isCurrent()) return null;
+    // Freeze the cache key before the read: `sessionProfile` can change while
+    // the request is in flight, and a reason recorded under the new profile
+    // would park that profile's socket source for a failure it never caused.
+    final failureKey = _modelPickerKey;
     // mk1215: without a runtime the catalog is read sessionless; an already
     // connected shared socket saves the chat's own handshake.
     final warm = SharedGatewayPool.instance.acquireIfConnected(
@@ -6285,7 +6289,19 @@ class _ChatScreenState extends State<ChatScreen>
         providers,
         catalog,
       );
-    } catch (_) {
+    } catch (error) {
+      // This silent null is why the sheet used to say "restricted" with no
+      // reason: the failure never reached `attempt()`'s catch inside the
+      // loader. Record it against the socket source before swallowing — but
+      // only if this read still owns the picker, matching the adjective the
+      // loader applies before it records anything.
+      if (isCurrent == null || isCurrent()) {
+        _modelPickerCache.noteFailure(
+          failureKey,
+          ModelPickerSource.socket,
+          error,
+        );
+      }
       return null;
     } finally {
       warm?.release();
@@ -16114,21 +16130,49 @@ class _ChatScreenState extends State<ChatScreen>
                     if (!loading &&
                         (snap.hasError ||
                             _modelCatalogAvailability !=
-                                ModelPickerAvailability.available))
+                                ModelPickerAvailability.available)) ...[
                       Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: Row(
                           children: [
                             Expanded(
-                              child: Text(
-                                _modelCatalogAvailability ==
-                                        ModelPickerAvailability.stale
-                                    ? Strings.of(ctx).chatModelCatalogStale
-                                    : Strings.of(ctx).chatModelCatalogDegraded,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  color: colors.textSecondary,
-                                ),
+                              // The reason sits under the headline instead of
+                              // in its own row: no extra padding, and the retry
+                              // button keeps its place on narrow screens.
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _modelCatalogAvailability ==
+                                            ModelPickerAvailability.stale
+                                        ? Strings.of(ctx).chatModelCatalogStale
+                                        : Strings.of(
+                                            ctx,
+                                          ).chatModelCatalogDegraded,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                                  if (_modelPickerCache.describeLastFailures(
+                                        pickerKey,
+                                      )
+                                      case final detail when detail.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        detail,
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          height: 1.25,
+                                          color: colors.textTertiary,
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                             TextButton.icon(
@@ -16153,6 +16197,7 @@ class _ChatScreenState extends State<ChatScreen>
                           ],
                         ),
                       ),
+                    ],
                     if (_settingModel)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
