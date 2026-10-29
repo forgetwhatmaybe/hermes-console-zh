@@ -203,6 +203,8 @@ on Windows — the Gradle half cannot run and the result would differ for the wr
 - `docs/REPAIR_BACKLOG.md` — what is still broken, in priority order, with the
   `file:line` and the acceptance test for each item. Read this before picking up
   repair work that is not yours.
+- `docs/PROGRESS.md` — what is already **done** and what proves it (commit, ticket,
+  test counts), plus which repos hold which change. Check it before redoing work.
 - `docs/CODE_MAP.md` — entry point: layers, one message end to end,
   invariants, change manual (which files and which suites for each kind of
   change), and the known traps.
