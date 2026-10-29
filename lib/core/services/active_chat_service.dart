@@ -11743,7 +11743,10 @@ class ActiveChat {
           // Ack diferido sin transcript y REST no pintó nada: el historial se
           // está cargando server-side en segundo plano. Espera el
           // `session.resume_progress` y reintenta la cola paginada ya lista.
-          if (snapshot.hydrating) {
+          // Un ACK que no anuncia el diferido puede seguirlo un
+          // `session.resume_progress` posterior: la hidratación viva cuenta
+          // igual que la anunciada.
+          if (snapshot.hydrating || _desktopHistoryHydrating) {
             if (!loadStillAuthorized()) return;
             final hydrated =
                 await (_historyHydrationAwaiter?.call() ??
@@ -11875,44 +11878,74 @@ class ActiveChat {
           StateError('Chat load failed');
     }
 
-    final context = _captureSessionMessagesPageRead(
+    var context = _captureSessionMessagesPageRead(
       consumer: _SessionMessagesPageConsumer.directLoad,
       passive: passiveOnly,
       loadEpoch: loadEpoch,
       profile: _storedSessionProfile,
       hardExpectedMessageCount: expectedMessageCount,
     );
-    final SessionMessagesPage page;
-    try {
-      page = await _fetchStoredMessagesPage(context);
-    } on _ProfileTranscriptReadExpired {
-      // Disposal retires the load harmlessly, but a living owner whose Retry
-      // revoked this read must still receive the authority denial.
-      if (_disposed) return;
-      rethrow;
-    }
-    if (!loadStillAuthorized()) return;
+    late SessionMessagesPage page;
+    late _SessionMessagesPageTransitionResult transition;
     var normalized = const <Map<String, dynamic>>[];
     _RefreshedTranscriptGraft? graft;
-    final transition = _consumeSessionMessagesPageEvidence(
-      page,
-      context,
-      projector: (pageProvesComplete) {
-        normalized = _normalizedNewestFirst(page.messages);
-        final candidate = _graftRefreshedTail(
-          normalized,
-          _messages,
-          refreshedTranscriptComplete: pageProvesComplete,
-          requiredTerminalFences: loadTerminalFences,
-          preservePartialExactTailCoverage: passiveOnly,
-        );
-        graft = candidate;
-        return _SessionMessagesPageProjection.fromGraft(normalized, candidate);
-      },
-    );
-    if (!loadStillAuthorized() ||
-        transition.action == _SessionMessagesPageAction.stale) {
-      return;
+    // Un offset 0 vacío todavía no prueba un transcript vacío mientras el
+    // gateway hidrata el historial en segundo plano: se espera una sola vez el
+    // desenlace de `session.resume_progress` y se relee la misma cola, igual
+    // que la rama de lifecycle. Sin hidratación en curso el vacío se denuncia
+    // exactamente como antes.
+    var awaitedHydrationForEmptyTail = false;
+    while (true) {
+      try {
+        page = await _fetchStoredMessagesPage(context);
+      } on _ProfileTranscriptReadExpired {
+        // Disposal retires the load harmlessly, but a living owner whose Retry
+        // revoked this read must still receive the authority denial.
+        if (_disposed) return;
+        rethrow;
+      }
+      if (!loadStillAuthorized()) return;
+      normalized = const <Map<String, dynamic>>[];
+      graft = null;
+      transition = _consumeSessionMessagesPageEvidence(
+        page,
+        context,
+        projector: (pageProvesComplete) {
+          normalized = _normalizedNewestFirst(page.messages);
+          final candidate = _graftRefreshedTail(
+            normalized,
+            _messages,
+            refreshedTranscriptComplete: pageProvesComplete,
+            requiredTerminalFences: loadTerminalFences,
+            preservePartialExactTailCoverage: passiveOnly,
+          );
+          graft = candidate;
+          return _SessionMessagesPageProjection.fromGraft(
+            normalized,
+            candidate,
+          );
+        },
+      );
+      if (!loadStillAuthorized() ||
+          transition.action == _SessionMessagesPageAction.stale) {
+        return;
+      }
+      if (transition.action != _SessionMessagesPageAction.throwExpectedCount) {
+        break;
+      }
+      if (awaitedHydrationForEmptyTail || !_desktopHistoryHydrating) break;
+      awaitedHydrationForEmptyTail = true;
+      final hydrated = await (_historyHydrationAwaiter?.call() ??
+          _awaitDesktopHistoryHydration());
+      if (!loadStillAuthorized()) return;
+      if (!hydrated) break;
+      context = _captureSessionMessagesPageRead(
+        consumer: _SessionMessagesPageConsumer.directLoad,
+        passive: passiveOnly,
+        loadEpoch: loadEpoch,
+        profile: _storedSessionProfile,
+        hardExpectedMessageCount: expectedMessageCount,
+      );
     }
     _observeDurableTail(
       page.messages,

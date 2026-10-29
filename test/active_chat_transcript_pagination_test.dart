@@ -7172,6 +7172,93 @@ void main() {
     expect(server.requests, hasLength(2));
   });
 
+  test('offset 0 vacío con hidratación en curso espera y pinta el historial '
+      'en vez de denunciar un transcript vacío', () async {
+    // Ack sin `hydrating`, como un gateway que no anuncia el diferido, y el
+    // `session.resume_progress` llega después: el servidor SÍ está hidratando
+    // cuando la primera lectura de offset 0 vuelve vacía. Hoy esa lectura
+    // concluye "transcript vacío" y la persona ve el error; debe esperar el
+    // desenlace de la hidratación, como hace la rama de lifecycle.
+    final gateway = _DeferrableGateway()
+      ..snapshot = DesktopSessionSnapshot.fromJson(
+        {
+          'session_id': 'runtime-late-hydration',
+          'session_key': 'stored-chat',
+          'hydrating': false,
+          'message_count': 2,
+          'messages': <Object>[],
+        },
+        requestedStoredSessionId: 'stored-chat',
+        created: false,
+        method: 'session.resume',
+      );
+    final rows = <Map<String, dynamic>>[];
+    final firstRead = Completer<void>();
+    var messageRequests = 0;
+    final client = MockClient((request) async {
+      if (!request.url.path.endsWith('/messages')) {
+        return http.Response(
+          jsonEncode(const <String, Object?>{}),
+          200,
+          headers: const {'content-type': 'application/json'},
+        );
+      }
+      messageRequests++;
+      if (messageRequests == 1) await firstRead.future;
+      return http.Response(
+        jsonEncode({
+          'object': 'list',
+          'session_id': 'stored-chat',
+          'messages': rows,
+          'pagination': {
+            'limit': 120,
+            'offset': 0,
+            'order': 'latest',
+            'returned': rows.length,
+          },
+        }),
+        200,
+        headers: const {'content-type': 'application/json'},
+      );
+    });
+    final chat = _chat('late-hydration', client, gateway: gateway);
+    addTearDown(chat.dispose);
+
+    // El error no puede escaparse como excepción no capturada: se captura para
+    // afirmar sobre él.
+    final load = chat.loadMessages(expectedMessageCount: 2).then<Object?>(
+      (_) => null,
+      onError: (Object error) => error,
+    );
+    while (messageRequests < 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // El servidor está hidratando aunque el ACK no lo anunciara.
+    gateway.emitResumeProgress('loading', messageCount: 2);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(chat.isHydratingDesktopHistory, isTrue);
+
+    // Primera lectura de offset 0: el historial todavía no existe.
+    firstRead.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    // La hidratación termina: el historial ya se puede leer.
+    gateway.emitResumeProgress('complete', messageCount: 2);
+    rows.addAll(_rows(2));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    final failure = await load;
+    expect(
+      failure,
+      isNull,
+      reason: 'una lectura vacía no debe delatar transcript vacío mientras el '
+          'gateway sigue hidratando: $failure',
+    );
+    expect(chat.messagesLoaded, isTrue);
+    expect(chat.messages, hasLength(2));
+  });
+
   test(
     'resume_progress sustituye inflight ya terminal sin duplicar el turno',
     () async {
