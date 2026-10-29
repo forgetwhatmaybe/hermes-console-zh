@@ -118,36 +118,292 @@ jobs:
           exit "${PIPESTATUS[0]}"
 
       # ── Step 3: Summary & failure report ─────────────────
+      # GitHub aborts step summaries over 1MB ("supports content up to a size
+      # of 1024k, got 3842k"), so this step never echoes a full log. It lists
+      # the failing test names, each with its real diagnostic: the exception
+      # block printed BEFORE the [E] marker for widget/golden failures
+      # ("Test failed. See exception logs above." carries nothing actionable),
+      # or the first Expected/Actual paragraph after it for ordinary matcher
+      # failures. Blocks are attributed to the failing test by the progress-message
+      # name in effect above the banner plus the test file in the block's stack
+      # frames, so a passing test's planted exception is never pinned on a failure.
+      # Hard-capped at ~900KB; the complete output stays in the job log.
       - name: Failure summary
         if: steps.analyze.outcome != 'success' || steps.test.outcome != 'success'
         env:
           ANALYZE_OUTCOME: ${{ steps.analyze.outcome }}
           TEST_OUTCOME: ${{ steps.test.outcome }}
         run: |
-          {
-            echo "## Quality checks failed"
-            echo ""
+          python3 - <<'PYEOF'
+          import os
+          import re
+          import textwrap
 
-            if [ "$ANALYZE_OUTCOME" != "success" ]; then
-              echo "### Static analysis failed"
-              echo '```'
-              cat analyze_output.txt
-              echo '```'
-              echo ""
-            else
-              echo "### Static analysis passed"
-              echo ""
-            fi
+          # Byte budget keeps the summary well under GitHub's 1024k abort. The final
+          # truncation note is appended outside write_block, so the block budget keeps
+          # NOTE_RESERVE free for it and the finished markdown stays within the cap.
+          MAX_SUMMARY_BYTES = 900 * 1024
+          NOTE_RESERVE = 1024
+          ANALYZE_MAX_CHARS = 64 * 1024   # analyze output is short; cap anyway
+          ERROR_MAX_CHARS = 600           # first error paragraph per failure
+          EXC_MAX_CHARS = 1600            # exception block preceding an [E] line
+          TAIL_LINES = 60                 # fallback when no [E] line exists
+          TAIL_MAX_CHARS = 16 * 1024
 
-            if [ "$TEST_OUTCOME" != "success" ]; then
-              echo "### Tests failed"
-              echo '```'
-              cat test_output.txt
-              echo '```'
-            else
-              echo "### All tests passed"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          summary = open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8")
+          used = 0
+          truncated = False
+
+          def write_block(text):
+              global used, truncated
+              size = len(text.encode("utf-8"))
+              if used + size > MAX_SUMMARY_BYTES - NOTE_RESERVE:
+                  truncated = True
+                  return
+              summary.write(text)
+              used += size
+
+          def codeblock(text):
+              fence = "```"
+              for run in re.findall(r"`{3,}", text):
+                  fence = max(fence, run + "`", key=len)
+              return fence + "\n" + text.rstrip("\n") + "\n" + fence + "\n"
+
+          # flutter test --reporter=expanded marks failures with [E]. Progress lines look
+          # like "MM:SS +N ~K -M: <name>"; a long name can wrap onto the following
+          # indented lines. Two failure shapes exist:
+          #
+          #   1. Widget/golden (framework-caught) failures print the exception block
+          #      between the ╡...╞ banner and the [E] line, and only print "Test failed.
+          #      See exception logs above." after it. The actionable diagnostic is the
+          #      block BEFORE [E]; the text after is just a pointer into the job log.
+          #   2. Ordinary matcher failures print the Expected/Actual paragraph after the
+          #      [E] line, up to the first blank line.
+          #
+          # So each [E] failure carries the exception block collected before its [E]
+          # line when there is one, and falls back to the after-paragraph otherwise.
+          #
+          # Attribution guard, two keys:
+          #   1. Owner name: a block belongs to a failure only when the progress-
+          #      message name in effect on the line above the banner (or carried
+          #      through continuation banners, which inherit it) equals the failing
+          #      test's name. This is what keeps a PASSING test's planted exception
+          #      (its own banner block, followed by no [E] of its own) from being
+          #      handed to a later failing test in the same file.
+          #   2. Test file: the failure's file must also appear in the block's own
+          #      stack frames (".../test/<file>.dart"). Blocks whose frames name
+          #      another file stay pending for their real owner (a passing test's
+          #      planted exception can sit right above an unrelated [E] in
+          #      interleaved logs). A group of blocks with no test frame at all
+          #      (e.g. Flutter's "Multiple exceptions (N)" note) falls back to the
+          #      failure counter: the -M counter increments exactly once per failed
+          #      test at its exception, so the group matches an [E] whose counter is
+          #      one above the counter in effect when the group opened; counters
+          #      never decrease, so a rejected group is dropped rather than pinned
+          #      on a later failure.
+          PROG = re.compile(r"^\d+:\d\d \+\d+(?: ~\d+)?(?: -\d+)?: ")
+          COUNTER = re.compile(r"-(\d+)")
+          NAME_FILE = re.compile(r"^(.*\.dart): ")
+          FRAME_FILE = re.compile(r"(?:file:///)?[^\s'*\"]*[/\\]test[/\\]([\w\-./\\]+\.dart)")
+          BANNER_OPEN = re.compile(r"^\s*═*\s*╡.*╞\s*═*\s*$")
+          BANNER_CLOSE = re.compile(r"^\s*═+\s*$")
+          BANNER_ANY = re.compile(r"^\s*(?:═*\s*╡.*╞\s*═*|═+)\s*$")
+
+          def line_counter(raw):
+              m = COUNTER.search(PROG.match(raw).group(0))
+              return int(m.group(1)) if m else 0
+
+          def name_file(name):
+              m = NAME_FILE.match(name)
+              return m.group(1).replace("\\", "/") if m else None
+
+          def block_file(block_lines):
+              for l in block_lines:
+                  m = FRAME_FILE.search(l)
+                  if m:
+                      return m.group(1).replace("\\", "/")
+              return None
+
+          def parse_failures(lines):
+              failures = []          # (name, error_text, from_exception_block)
+              names_seen = set()
+              name = None            # failing test awaiting its error text
+              err = []               # paragraph collected after [E]
+              failure_exc = []       # exception block claimed by the current failure
+              pending_blocks = []    # (owner_name, lines): blocks awaiting their owner
+              cur_block = None       # block being collected right now
+              block_pre_m = None     # counter in effect when the first pending block opened
+              last_m = 0             # counter of the most recent progress line
+              collecting = False     # inside a ╡...╞-delimited exception block
+              pending = ""           # wrapped long test name accumulated so far
+              cur_owner = None       # progress-name in effect at this point in the log
+
+              def flush():
+                  # Closes the open failure. Its exception block, if any, was claimed
+                  # at its [E] line; the block wins over the after-paragraph, which is
+                  # then just the "See exception logs above." pointer.
+                  nonlocal name, err, failure_exc
+                  if name is not None and name not in names_seen:
+                      names_seen.add(name)
+                      block = "\n".join(failure_exc).strip()
+                      if block:
+                          failures.append((name, block, True))
+                      else:
+                          text = textwrap.dedent("\n".join(
+                              l for l in err if not BANNER_ANY.match(l))).strip()
+                          failures.append((name, text, False))
+                  name = None
+                  err = []
+                  failure_exc = []
+
+              def claim(m, fname, owner):
+                  # Hands a pending block over only when the name in effect above its
+                  # banner belongs to the failing test: equality, or the wrapped-name
+                  # case where the [E] name extends the progress name across lines
+                  # (then block frames and the failure must also name the same test
+                  # file). Anything else keeps owner-named blocks pending — only
+                  # their own owner's [E] can claim them later — so a passing test's
+                  # planted exception (its own banner, followed by no [E] of its
+                  # own) is never pinned on a later failure. Ownerless, fileless
+                  # groups (banners printed before the first progress line) fall
+                  # back to the failure counter: the -M counter increments exactly
+                  # once per failed test at its exception, so the group matches an
+                  # [E] whose counter is one above the counter in effect when the
+                  # group opened; once that window passes they are dropped rather
+                  # than pinned on a later failure.
+                  nonlocal pending_blocks, block_pre_m
+                  if not pending_blocks:
+                      return []
+                  matched, keep = [], []
+                  for o, b in pending_blocks:
+                      bf = block_file(b)
+                      same_file = (bf is None or fname is None or
+                                   bf.endswith(fname) or fname.endswith(bf))
+                      wrapped = (bf is not None and fname is not None and same_file
+                                 and o is not None and owner is not None
+                                 and owner.startswith(o) and o != owner)
+                      if (o == owner and same_file) or wrapped:
+                          matched.append(b)
+                      elif o is not None:
+                          keep.append((o, b))
+                  if matched:
+                      pending_blocks = keep
+                      return [l for b in matched for l in b]
+                  if all(o is None and block_file(b) is None
+                         for o, b in pending_blocks):
+                      pre = block_pre_m
+                      if pre is not None and m == pre + 1:
+                          group = [l for _, b in pending_blocks for l in b]
+                          pending_blocks = []
+                          block_pre_m = None
+                          return group
+                  pending_blocks = keep  # ownerless leftovers are never claimable
+                  block_pre_m = None
+                  return []
+
+              for raw in lines:
+                  if PROG.match(raw):
+                      msg = PROG.sub("", raw, count=1).strip()
+                      m = line_counter(raw)
+                      last_m = m
+                      flush()
+                      if msg.endswith("[E]"):
+                          nm = msg[:-3].strip()
+                          failure_exc = claim(m, name_file(nm), nm)
+                          name = nm
+                          cur_owner = nm
+                          pending = ""
+                      else:
+                          cur_owner = msg
+                          pending = msg
+                  elif collecting:
+                      if BANNER_CLOSE.match(raw):
+                          collecting = False
+                      else:
+                          cur_block.append(raw.rstrip())
+                  elif BANNER_OPEN.match(raw):
+                      flush()
+                      cur_block = []
+                      if not pending_blocks:
+                          block_pre_m = last_m
+                      pending_blocks.append((cur_owner, cur_block))
+                      collecting = True   # consecutive blocks accumulate for one owner
+                  elif raw.strip():
+                      if name is not None:
+                          err.append(raw.rstrip())
+                      elif pending and raw.startswith("  "):
+                          stripped = raw.strip()
+                          if stripped.endswith("[E]"):
+                              nm = (pending + " " + stripped[:-3]).strip()
+                              failure_exc = claim(last_m, name_file(nm), nm)
+                              name = nm
+                              cur_owner = nm
+                              pending = ""
+                          else:
+                              pending = pending + " " + stripped
+                  elif name is not None:
+                      flush()            # blank line terminates a matcher paragraph
+              flush()
+              return failures
+
+          analyze_outcome = os.environ.get("ANALYZE_OUTCOME", "success")
+          test_outcome = os.environ.get("TEST_OUTCOME", "success")
+
+          write_block("## Quality checks failed\n\n")
+
+          if analyze_outcome != "success":
+              write_block("### Static analysis failed\n\n")
+              try:
+                  with open("analyze_output.txt", encoding="utf-8", errors="replace") as f:
+                      analyze_text = f.read()
+              except OSError:
+                  analyze_text = "(analyze_output.txt not found)"
+              write_block(codeblock(analyze_text[:ANALYZE_MAX_CHARS]))
+              if len(analyze_text) > ANALYZE_MAX_CHARS:
+                  write_block("_Truncated; the full output is in the job log._\n\n")
+              write_block("\n")
+          else:
+              write_block("### Static analysis passed\n\n")
+
+          if test_outcome != "success":
+              write_block("### Tests failed\n\n")
+              try:
+                  with open("test_output.txt", encoding="utf-8", errors="replace") as f:
+                      test_lines = f.read().splitlines()
+              except OSError:
+                  test_lines = ["(test_output.txt not found)"]
+
+              failures = parse_failures(test_lines)
+              if failures:
+                  write_block(f"{len(failures)} failing test(s):\n\n")
+                  for test_name, err_text, from_exc in failures:
+                      block = "- `" + test_name + "`\n"
+                      if err_text:
+                          limit = EXC_MAX_CHARS if from_exc else ERROR_MAX_CHARS
+                          shown = err_text[:limit]
+                          if len(err_text) > limit:
+                              shown = shown + "\n…"
+                          block = block + "  " + codeblock(shown).replace("\n", "\n  ") + "\n"
+                      write_block(block)
+              else:
+                  # No [E] markers: usually a compile/load error. Show a
+                  # capped tail so the summary still points at the cause.
+                  if test_lines:
+                      tail = "\n".join(test_lines[-TAIL_LINES:])
+                      write_block(codeblock(tail[:TAIL_MAX_CHARS]) + "\n")
+                  else:
+                      write_block("(test_output.txt is empty)\n")
+          else:
+              write_block("### All tests passed\n\n")
+
+          if truncated:
+              summary.write(
+                  "\n> Output truncated to stay under GitHub's 1MB step-summary"
+                  " limit; the full log is in the job log (Static analysis /"
+                  " Run tests steps).\n"
+              )
+          summary.close()
+          PYEOF
 
       # ── Step 4: Pass/fail enforcement ────────────────────
       - name: Enforce checks

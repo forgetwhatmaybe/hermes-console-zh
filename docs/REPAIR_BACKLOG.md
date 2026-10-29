@@ -53,23 +53,55 @@ is also no consumer, so it would be dead code.
 
 ## P2 — worth doing, not urgent
 
-### 3. `Failure summary` overflows the 1 MB step-summary limit
+### 3. `Failure summary` overflows the 1 MB step-summary limit — FIXED 2026-10-29 (working tree, uncommitted)
 
 **Where**: `.github/workflows/pr-quality.yml`, the `Failure summary` step.
 
-**Symptom**: the whole `test_output.txt` is written into `$GITHUB_STEP_SUMMARY`:
+**Was**: the whole `test_output.txt` was written into `$GITHUB_STEP_SUMMARY`:
 
 ```
 $GITHUB_STEP_SUMMARY upload aborted, supports content up to a size of 1024k, got 3842k
 ```
 
-So when tests fail, the summary page is blank — exactly when you need it.
+So when tests failed, the summary page was blank — exactly when you need it.
 
-**Fix**: write only the failing test names plus the first error paragraph of
-each; keep the full output in the job log. Note 3.8 MB is the *whole* output,
-not the failure count — do not read it as "many failures".
+**Fix (applied, revised same day)**: the step emits a short header, the failing
+test names, and each failure's real diagnostic: for widget/golden failures the
+exception block printed BEFORE the `[E]` marker (after it Flutter only says
+"Test failed. See exception logs above."), for ordinary matcher failures the
+Expected/Actual paragraph after `[E]` (600 chars; exception blocks get 1600).
+Blocks are attributed by the progress-message name in effect above the
+banner (continuation banners inherit the name still in effect); a block is
+claimed only at the `[E]` of that same test — with a frame check for wrapped
+names and a failure-counter check (`-M` increments once per failed test at
+the exception) for ownerless preamble blocks — so a passing test's planted
+exception (`rowerr/chat_row_boundary_test.dart` seeds "Bad state: x" blocks
+that sit right above an unrelated `[E]` in interleaved logs) is never pinned
+on the wrong failure, and duplicate `[E]` emissions of one test yield one
+bullet. A
+capped 60-line tail covers no-`[E]` runs (compile/load errors); the markdown
+hard-caps at 900 KB (1 KB reserved for the truncation note, which is appended
+outside the block budget) with a note that the full log is in the job log.
+The `if:` condition and the analyze/test reporting are unchanged; no other
+step touched. Intermediate versions of this fix kept only the post-`[E]`
+paragraph (discarding the actionable diagnostic for 25 golden/widget failures
+in the real full-test log) and attached blocks by position alone (mis-attaching
+a passing test's planted exception to `rt1215_tertiary_guard_test`); both
+caught in review, fixed same day.
 
-**Acceptance**: a failing run produces a readable summary under 1 MB.
+**Verified** (2026-10-29): the embedded script was extracted from the YAML and
+run against the real full-test log (`D:\tmp\full-test4.log`, 72 failures /
+73 `[E]` emissions incl. one duplicate): 72 unique bullets = 72 failures, 25
+exception-attached + 29 matcher + 18 other raw-thrown paragraphs, 0 bare
+"See exception logs above." pointers, exception-attached set exactly equals
+the set of tests whose `[E]` is followed by the pointer line (symmetric
+difference 0); `rt1215_tertiary_guard_test` shows its own `Expected: empty`
+matcher failure, not the planted "Bad state: x" block. A 3,500-failure ~4 MB
+synthetic log produced 920,456 bytes (under the 900 KB cap, note appended);
+missing/empty/no-`[E]`/both-pass paths pass; YAML parses, 17 steps.
+
+**Acceptance**: a failing run produces a readable summary under 1 MB — met by
+construction; the first real failing CI run confirms it on GitHub's side.
 
 ### 4. Queued-message steer/replace has no UI (decided: do not build)
 
