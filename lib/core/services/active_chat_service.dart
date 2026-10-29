@@ -17480,8 +17480,11 @@ class ActiveChat {
       _modelCatalogCache.write(connection.id, profile, catalog);
       return catalog;
     } catch (error) {
+      // runtimeType alone cannot tell "gateway refused" from "socket closed";
+      // the message carries the code (e.g. 4007, 401, timeout).
       debugPrint(
-        '[active-chat] sessionless model.options failed (${error.runtimeType})',
+        '[active-chat] sessionless model.options failed '
+        '(${error.runtimeType}): $error',
       );
       return null;
     }
