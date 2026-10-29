@@ -38,6 +38,39 @@ this repository.
   the change until fixed and re-reviewed; a malformed or empty verdict is not a
   pass. Do not swap model or channel without the owner saying so in the task.
 
+## Fix priority — user-visible first (owner directive, 2026-10-29)
+
+Rank work by whether the person holding the phone can feel it. That order
+outranks everything else in this file when deciding what to fix next.
+
+1. **Lost or duplicated content.** A message half-delivered, a notification
+   dropped, a draft cleared, an attachment that never arrives, a reply shown
+   twice. This is the only category where a bug silently destroys something
+   the person made.
+2. **Stuck or wrong state.** A turn that never ends, a retry that opens a
+   second turn, a list showing rows that are gone, a button that does nothing
+   when pressed, a screen that says "sent" when it was not.
+3. **Waiting with no feedback.** No spinner, no progress, no failure notice —
+   the press ends with nothing on screen.
+4. **Text and layout.** Wrong plural, clipped label, a hint that reads as
+   disabled when it is not, overflow on a narrow phone.
+5. **Invisible work.** CI config, test isolation, SBOM freshness, internal
+   refactors, docs.
+
+Rules that follow from this:
+
+- One known item from 1–3 outranks any number of 5s. Do not spend a night on
+  category 5 while a 1–3 is open.
+- Category 5 still gets done — it keeps the 1–3s from coming back — but never
+  ahead of a known 1–3.
+- **When auditing source for bugs, look for 1–3 first.** A tree that passes
+  every contract suite can still drop a person's message (see `#1` in
+  `docs/PROGRESS.md`: every test green, events still lost). Contracts prove
+  the code agrees with itself, not that the product works.
+- Every fix carries a one-line "what the person feels" note in its commit
+  message. If that sentence cannot be written, the change is category 5 and
+  should say so.
+
 ## Architecture (map: `docs/ARCHITECTURE.md`, contract: `docs/UPSTREAM_CONTRACT.md`)
 
 - One Flutter Android client. There is no Console backend: the phone talks only

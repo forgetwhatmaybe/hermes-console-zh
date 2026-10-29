@@ -17,7 +17,7 @@ Last updated: 2026-10-29 10:30 (Asia/Shanghai).
 | 1 | kanban half-delivered claims lost events | **DONE, committed** | commit `a98c30ece5` in the server repo; patch `0006` in the patch repo; segmented receipts in `session_notifications.py`; `test_half_delivered_claim_rewinds_only_the_refused_half` (RED→GREEN) + `test_trailing_silent_event_rewinds_to_the_full_claim_endpoint`; 8 passed on the file, 73 across 7 related files; Codex FAIL(1×P2)→fix→PASS; mutation check done |
 | 2 | `session_authority` unconsumed | **NOT STARTED — blocked on product** | server fills it from the same `missing` variable as `truncated`, so wiring it today is dead code |
 | 4 | Queued-message steer/replace has no UI | **NOT STARTED — decided not to build** | local queue already covers the case; server FIFO only holds work when another owner holds the session |
-| 6 | `specs/082` process tickets | **NOT STARTED — out of nightly scope** | `T1-*` are server-side |
+| 6 | `specs/082` process tickets | **OPEN — verification gap, not an unfixed defect** | `specs/082-source-audit-fixes/tasks.md` records the server-side T1 fixes as reviewed and deployed at `c23ef9680d`; the unchecked `T1-FIX`/`T1-GREEN` boxes are this spec's **client-side verification** still outstanding, not a live double-send race. `LIVE-01` is genuinely unresolved: paired 1006 disconnects with phone-side recovery unproven |
 | 7 | 8 Windows-only test failures | **WILL NOT FIX** | `AGENTS.md` forbids fixing them in an unrelated change; CI (ubuntu) reports 0 failures for the same suites |
 | 8 | One timing-shaped flake | **WILL NOT FIX** | same code passed and failed in two full runs |
 | 9 | SBOM freshness gate relaxed | **NOT STARTED — needs Linux** | `generate.py` shells out to `android/gradlew` (POSIX script); cannot be generated on Windows |
@@ -66,6 +66,34 @@ the true claim endpoint.
 - `tests/tui_gateway/test_kanban_cursor_rewind.py`
 
 ---
+
+## What to do next (priority)
+
+`AGENTS.md` § *Fix priority — user-visible first* is the ranking.
+
+Still open **and user-visible**:
+- `LIVE-01` — paired 1006 disconnects; whether the phone recovers on its own is
+  unproven. A dropped connection the app does not come back from is category 2
+  (stuck state) in the ranking above.
+- `#6 / T1-FIX` — but read the row above first: the server fix is deployed, so
+  what is open is verification, not a known race. Treating an unticked box as a
+  live defect would send the next implementer into already-repaired code.
+
+Still open **and invisible**: `#2` has no consumer, `#4` is a multi-device
+convenience, `#9` is compliance, `#7`/`#8` are local test noise.
+
+Before touching anything, ask the ranking question: *can the person holding the
+phone feel this?* If no, it waits behind anything that is yes.
+
+## Owner decisions
+
+- **2026-10-29**: `#6 / T1-FIX` is **not being changed** right now — there is no
+  multi-phone usage at present. The verification gap stays recorded above; do
+  not reopen the server code for it without a concrete trigger (a second device
+  in use, or a reproduced double-send).
+- **2026-10-29**: `#9` SBOM stays `continue-on-error`. Only the diff logging
+  landed (`deb34e1`); regenerating the SBOM is not worth CI minutes while it has
+  no effect on what the person using the app sees.
 
 ## How to resume
 
