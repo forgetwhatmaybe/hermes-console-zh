@@ -112,6 +112,51 @@ read: hydration not finished when a non-empty session answers with empty
 history, or a transient transport error. Both need one failing device log — the
 log distinguishes them, guessing does not.
 
+## Root-cause candidates for "opening a chat needs one retry"
+
+Read-only trace, 2026-10-29. No runtime log yet, so this ranks candidates; it
+does not prove which one fires most.
+
+`S` = `lib/core/services/active_chat_service.dart`, `U` = `lib/core/screens/chat_screen.dart`.
+
+**Most likely — the direct read bypasses the hydration wait.** A direct read of
+offset 0 on a session whose `messageCount > 0` throws when the reply carries
+zero rows (`S:12728`, `S:11921`); it does **not** wait for hydration. The
+lifecycle path does wait (up to 30 s, `S:11735`/`11746`), but the direct read
+skips it. Server not hydrated yet → empty rows → throw. The person presses
+retry a second later, hydration has finished, it works. That is exactly the
+reported shape.
+
+**Second — a stale ACK clears the finished flag.** A `complete` event arriving
+before a `hydrating` ACK lets the later ACK reset the recorded success to null,
+so the read waits the full 30 s for nothing (`S:11267`, `S:14852`, `S:14884`).
+
+**Others, ranked lower:** HTTP non-200 / transport / decode
+(`connection_manager.dart:1592`, `S:12353`); local privacy-store failure
+(`S:10978`); prefetch success with an empty result on a non-empty session
+(`S:11840`).
+
+**All empty-history paths throw the same text**, so a log cannot tell them
+apart:
+
+```
+Bad state: Hermes returned an empty transcript for a non-empty session
+```
+
+HTTP paths keep their typed form (`CoreReadException(auth, HTTP 401)` etc.). The
+UI stores the exception's `toString()` in `_error` but the visible string is the
+generic 无法加载消息 (`U:10373`, `U:10440`, `app_zh.arb:512`) — so a screenshot
+shows only the generic message. The distinguishable text is in the expandable
+detail of that card.
+
+**The fix that does not hide the failure:** make the direct read wait for
+hydration the way the lifecycle path does, and fix the ACK ordering so a late
+`hydrating` cannot clear a recorded success (`S:11114`, `S:11267`, `S:14884`).
+Both keep the real failure reaching the existing catch — they remove the
+*premature* reads, not the error.
+
+Do not re-add silent retries; see `Tried and reverted` above.
+
 ## Owner decisions
 
 - **2026-10-29**: `#6 / T1-FIX` is **not being changed** right now — there is no
