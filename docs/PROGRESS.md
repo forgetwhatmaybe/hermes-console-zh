@@ -85,6 +85,33 @@ convenience, `#9` is compliance, `#7`/`#8` are local test noise.
 Before touching anything, ask the ranking question: *can the person holding the
 phone feel this?* If no, it waits behind anything that is yes.
 
+## Tried and reverted — do not repeat
+
+**2026-10-29**: added silent retries around the first read of a conversation
+(`_fetchWithRetry`, 600 ms then 1800 ms, only when `_error` was set). Codex
+reviewed it and caught a real race (a manual Retry pressed during the delay
+would be superseded by the automatic one); that was fixed, review passed.
+
+**It broke 15 tests.** `chat_screen_test.dart` went from 812 passed / 8 failed
+to 797 / 23. The failures were not incidental:
+
+- `404 de sesion persistida muestra error estable y permite reintentar`
+- `fallo de apertura fria muestra error aunque hidratacion siga pendiente`
+- `Bot Chat desbloquea composer al publicar tras dos fallos aunque resume siga pendiente`
+- `Bot Chat recupera foco y texto tras fallar y reintentar`
+
+Those four assert the product contract: **a failed open must show the error and
+offer retry immediately**. An automatic retry delays or erases `_error`, so the
+contract breaks. "Show the error, let the person press Retry" is deliberate, not
+a missing retry.
+
+Reverted in full (`git checkout -- lib/core/screens/chat_screen.dart`). If this
+is revisited, the fix has to reduce the *failure rate*, not hide the failure:
+the open question is why the first read fails at all. Candidates from the code
+read: hydration not finished when a non-empty session answers with empty
+history, or a transient transport error. Both need one failing device log — the
+log distinguishes them, guessing does not.
+
 ## Owner decisions
 
 - **2026-10-29**: `#6 / T1-FIX` is **not being changed** right now — there is no
