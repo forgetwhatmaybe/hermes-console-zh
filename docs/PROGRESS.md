@@ -14,7 +14,7 @@ Last updated: 2026-10-29 10:30 (Asia/Shanghai).
 |---|---|---|---|
 | 3 | `Failure summary` overflowed the 1 MB step-summary cap | **DONE, pushed** | commit `bff0591`; Codex ticket (PASS); parser verified against the real full-test log: 72 unique failures, 25 attached exception diagnostics |
 | 5 | `FakeProc.poll` leaked across tests | **DONE, committed** | commit `14f6cdcec6` in the server repo; 22 passed / 0 failed / 2 skipped on the whole file; Codex ticket (PASS); patch `0005` in the private patch repo |
-| 1 | kanban half-delivered claims lost events | **CODE DONE, uncommitted** | segmented receipts in `session_notifications.py`; `test_half_delivered_claim_rewinds_only_the_refused_half` (RED→GREEN) + `test_trailing_silent_event_rewinds_to_the_full_claim_endpoint`; 73 passed / 0 failed across 7 related files; Codex FAIL(1×P2)→fix→PASS; mutation check done |
+| 1 | kanban half-delivered claims lost events | **DONE, committed** | commit `a98c30ece5` in the server repo; patch `0006` in the patch repo; segmented receipts in `session_notifications.py`; `test_half_delivered_claim_rewinds_only_the_refused_half` (RED→GREEN) + `test_trailing_silent_event_rewinds_to_the_full_claim_endpoint`; 8 passed on the file, 73 across 7 related files; Codex FAIL(1×P2)→fix→PASS; mutation check done |
 | 2 | `session_authority` unconsumed | **NOT STARTED — blocked on product** | server fills it from the same `missing` variable as `truncated`, so wiring it today is dead code |
 | 4 | Queued-message steer/replace has no UI | **NOT STARTED — decided not to build** | local queue already covers the case; server FIFO only holds work when another owner holds the session |
 | 6 | `specs/082` process tickets | **NOT STARTED — out of nightly scope** | `T1-*` are server-side |
@@ -22,8 +22,8 @@ Last updated: 2026-10-29 10:30 (Asia/Shanghai).
 | 8 | One timing-shaped flake | **WILL NOT FIX** | same code passed and failed in two full runs |
 | 9 | SBOM freshness gate relaxed | **NOT STARTED — needs Linux** | `generate.py` shells out to `android/gradlew` (POSIX script); cannot be generated on Windows |
 
-**Net:** 3 of 9 closed. 1 awaits one commit. 2 are product decisions. 3 are
-deliberately out of scope.
+**Net:** 4 of 9 closed (1, 3, 5 and the 8-item baseline is excluded). 2 are product
+decisions. 3 are deliberately out of scope or blocked.
 
 ---
 
@@ -42,7 +42,7 @@ usage ticker, `0005` FakeProc leak. The item-1 fix will be `0006`.
 
 ---
 
-## Item 1 in detail (the one still open)
+## Item 1 in detail (done — kept for the rationale)
 
 **Problem**: one claim spans the diagnostic half and the result half of a text.
 If one half was delivered and the other hit the refusal limit, that range cannot
