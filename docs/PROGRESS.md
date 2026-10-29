@@ -112,6 +112,32 @@ read: hydration not finished when a non-empty session answers with empty
 history, or a transient transport error. Both need one failing device log — the
 log distinguishes them, guessing does not.
 
+## Fixed: opening a chat reported an empty transcript (2026-10-29, `fc4dea8`)
+
+**What the person feels:** tapping an existing conversation showed 无法加载消息,
+then worked on a second tap. Gone: the first read now waits one hydration outcome
+instead of concluding "empty" while the gateway is still hydrating.
+
+**Root cause:** the direct read of offset 0 did not wait for hydration. A session
+with `message_count > 0` answered with zero rows while hydration was still
+running, and that path threw `Bad state: Hermes returned an empty transcript for
+a non-empty session` on the spot. The lifecycle path already waited up to 30 s;
+the direct read skipped it.
+
+**Fix:** when the tail is empty and hydration is live (`snapshot.hydrating` or
+`_desktopHistoryHydrating`), wait once for `session.resume_progress` and reread
+the same page. Bounded to one wait. A genuinely empty session still throws the
+same error, and 404/auth/transport still fail immediately.
+
+**Not the fix:** silent retries. That was tried and reverted — it broke 15 tests
+that assert "a failed open must show the error at once". See *Tried and reverted*.
+
+**Evidence:** new RED in `test/active_chat_transcript_pagination_test.dart`
+(`offset 0 vacío con hidratación en curso…`) failed with the exact
+`StateError: Bad state: … empty transcript` text, then went green;
+`chat_screen_test` stayed at `+812 -8` (baseline, no new failures);
+`flutter analyze lib test` clean; Codex ticket PASS.
+
 ## Root-cause candidates for "opening a chat needs one retry"
 
 Read-only trace, 2026-10-29. No runtime log yet, so this ranks candidates; it
