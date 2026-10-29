@@ -96,6 +96,11 @@ jobs:
         continue-on-error: true
         run: |
           ./tool/sbom/generate.sh
+          # Print what drifted before failing: the diff is the only way to tell
+          # "a version bump needs a regenerate" apart from "source-assets.json
+          # fingerprint drifted on its own". The job log keeps these 400 lines.
+          git --no-pager diff --stat -- sbom || true
+          git --no-pager diff -- sbom | head -400 || true
           git diff --exit-code -- sbom
 
       - name: Run Python security and SBOM tests
